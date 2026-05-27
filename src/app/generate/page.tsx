@@ -78,15 +78,13 @@ export default function GeneratePage() {
     setVideoUrl('')
 
     try {
-      // 1. Create video record
-      const { createClient } = await import('@/lib/supabase/client')
-      const db = createClient()
-      const { data: video } = await db.from('videos').insert({
-        topic:           finalPrompt.slice(0, 100),
-        original_prompt: prompt,
-        enhanced_prompt: enhanced,
-        status:          'generating',
-      }).select().single()
+      // 1. Create video record via server route (avoids anon key JWT issues)
+      const res = await fetch('/api/create-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ original_prompt: prompt, enhanced_prompt: enhanced, topic: finalPrompt.slice(0, 100) })
+      })
+      const video = await res.json()
       const vid = video?.id ?? ''
       setVideoId(vid)
 
@@ -181,7 +179,8 @@ export default function GeneratePage() {
               placeholder="e.g. Why our AI tool saves marketing teams 10 hours a week"
               rows={3}
               disabled={isRunning}
-              className="w-full bg-surface-DEFAULT border border-surface-border rounded-lg px-4 py-3 text-sm text-white placeholder-zinc-600 resize-none focus:outline-none focus:border-brand-500 disabled:opacity-50"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm placeholder-zinc-600 resize-none focus:outline-none focus:border-brand-500 disabled:opacity-50"
+              style={{ color: '#ffffff', backgroundColor: '#111111' }}
             />
 
             <button
