@@ -106,6 +106,7 @@ export default function GeneratePage() {
         body: JSON.stringify({ prompt: finalPrompt, videoId: vid }),
       })
       const script = await scriptRes.json()
+      if (script.error) throw new Error(`Script generation failed: ${script.error}`)
 
       // 3. Generate images for all scenes in parallel
       setStep('imaging')
