@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import Sidebar from '@/components/Sidebar'
 import AgentScoreCard from '@/components/AgentScoreCard'
+import VideoSlideshow from '@/components/VideoSlideshow'
 import { Sparkles, ArrowRight, RefreshCw, CheckCircle, AlertCircle, Loader2, Play } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -19,6 +20,12 @@ interface ReviewResult {
   fixes: string[]
   masterNotes: string
   round: number
+}
+
+interface SlideshowScene {
+  imageUrl: string
+  duration: number
+  caption?: string
 }
 
 const AGENT_ROLES: Record<string, string> = {
@@ -43,14 +50,14 @@ const STEP_LABELS: Record<Step, string> = {
 }
 
 export default function GeneratePage() {
-  const [prompt, setPrompt]             = useState('')
-  const [enhanced, setEnhanced]         = useState('')
-  const [useEnhanced, setUseEnhanced]   = useState(true)
-  const [step, setStep]                 = useState<Step>('idle')
-  const [review, setReview]             = useState<ReviewResult | null>(null)
-  const [videoUrl, setVideoUrl]         = useState('')
-  const [videoId, setVideoId]           = useState('')
-  const [error, setError]               = useState('')
+  const [prompt, setPrompt]               = useState('')
+  const [enhanced, setEnhanced]           = useState('')
+  const [useEnhanced, setUseEnhanced]     = useState(true)
+  const [step, setStep]                   = useState<Step>('idle')
+  const [review, setReview]               = useState<ReviewResult | null>(null)
+  const [previewScenes, setPreviewScenes] = useState<SlideshowScene[]>([])
+  const [previewAudio, setPreviewAudio]   = useState<string | null>(null)
+  const [error, setError]                 = useState('')
 
   async function enhancePrompt() {
     if (!prompt.trim()) return
@@ -58,7 +65,7 @@ export default function GeneratePage() {
     setError('')
     setEnhanced('')
     setReview(null)
-    setVideoUrl('')
+    setPreviewScenes([])
 
     try {
       const res = await fetch('/api/enhance-prompt', {
@@ -81,18 +88,17 @@ export default function GeneratePage() {
     setStep('scripting')
     setError('')
     setReview(null)
-    setVideoUrl('')
+    setPreviewScenes([])
+    setPreviewAudio(null)
 
     try {
       // 1. Create video record via server route (avoids anon key JWT issues)
-      const res = await fetch('/api/create-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ original_prompt: prompt, enhanced_prompt: enhanced, topic: finalPrompt.slice(0, 100) })
+      const videoRes = await fetch('/api/create-video', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ original_prompt: prompt, enhanced_prompt: enhanced, topic: finalPrompt.slice(0, 100) }),
       })
-      const video = await res.json()
+      const video = await videoRes.json()
       const vid = video?.id ?? ''
-      setVideoId(vid)
 
       // 2. Generate script
       const scriptRes = await fetch('/api/generate-script', {
@@ -122,7 +128,7 @@ export default function GeneratePage() {
       })
       const { audioUrl } = await voiceRes.json()
 
-      // 5. Assemble video
+      // 5. Assemble (returns previewMode assets — no FFmpeg on Vercel)
       setStep('assembling')
       const assembleRes = await fetch('/api/assemble-video', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -134,8 +140,12 @@ export default function GeneratePage() {
           audioUrl,
         }),
       })
-      const { mp4Url } = await assembleRes.json()
-      setVideoUrl(mp4Url ?? '')
+      const assembleData = await assembleRes.json()
+
+      if (assembleData.previewMode) {
+        setPreviewScenes(assembleData.scenes ?? scenesWithImages)
+        setPreviewAudio(assembleData.audioUrl ?? audioUrl ?? null)
+      }
 
       // 6. Run agent review council
       setStep('reviewing')
@@ -252,9 +262,8 @@ export default function GeneratePage() {
               {(['scripting','imaging','voicing','assembling','reviewing'] as Step[]).map((s, i) => {
                 const steps: Step[] = ['scripting','imaging','voicing','assembling','reviewing']
                 const idx = steps.indexOf(step)
-                const thisIdx = i
-                const done = thisIdx < idx
-                const active = thisIdx === idx
+                const done   = i < idx
+                const active = i === idx
                 return (
                   <div key={s} className={clsx(
                     'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm',
@@ -283,17 +292,11 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {/* Video preview */}
-          {videoUrl && (
+          {/* Video slideshow preview */}
+          {previewScenes.length > 0 && (
             <div className="mt-8">
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Preview</h2>
-              <div className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden">
-                <video
-                  src={videoUrl}
-                  controls
-                  className="w-full max-h-[500px] object-contain bg-black"
-                />
-              </div>
+              <VideoSlideshow scenes={previewScenes} audioUrl={previewAudio} />
             </div>
           )}
 
@@ -314,12 +317,10 @@ export default function GeneratePage() {
                 </div>
               </div>
 
-              {/* Master verdict */}
               <div className="bg-surface-card border border-surface-border rounded-xl p-4 mb-4">
                 <p className="text-xs text-zinc-400 leading-relaxed">{review.masterNotes}</p>
               </div>
 
-              {/* Agent scores */}
               <div className="grid grid-cols-1 gap-3">
                 {(Object.keys(review.agentScores) as Array<keyof AgentScores>).map(agent => (
                   <AgentScoreCard
@@ -332,7 +333,6 @@ export default function GeneratePage() {
                 ))}
               </div>
 
-              {/* Fixes */}
               {review.fixes.length > 0 && (
                 <div className="mt-4 bg-surface-card border border-surface-border rounded-xl p-4">
                   <p className="text-xs font-semibold text-zinc-400 mb-2">Suggested fixes</p>
@@ -353,8 +353,10 @@ export default function GeneratePage() {
                     <Play size={14} />
                     Schedule for Publishing
                   </button>
-                  <button onClick={() => { setStep('idle'); setReview(null); setVideoUrl(''); setEnhanced(''); setPrompt('') }}
-                    className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors">
+                  <button
+                    onClick={() => { setStep('idle'); setReview(null); setPreviewScenes([]); setPreviewAudio(null); setEnhanced(''); setPrompt('') }}
+                    className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors"
+                  >
                     New Video
                   </button>
                 </div>
