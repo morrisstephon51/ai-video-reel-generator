@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Sidebar from '@/components/Sidebar'
 import AgentScoreCard from '@/components/AgentScoreCard'
 import VideoSlideshow from '@/components/VideoSlideshow'
+import VideoRenderer from '@/components/VideoRenderer'
 import { Sparkles, ArrowRight, RefreshCw, CheckCircle, AlertCircle, Loader2, Play } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -293,11 +294,22 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {/* Video slideshow preview */}
+          {/* Video output — renderer (real MP4) + slideshow preview */}
           {previewScenes.length > 0 && (
-            <div className="mt-8">
-              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Preview</h2>
-              <VideoSlideshow scenes={previewScenes} audioUrl={previewAudio} />
+            <div className="mt-8 space-y-6">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Create Your Video</h2>
+                <VideoRenderer scenes={previewScenes} audioUrl={previewAudio} />
+              </div>
+              <details className="group">
+                <summary className="text-xs text-zinc-500 cursor-pointer select-none hover:text-zinc-400 list-none flex items-center gap-1">
+                  <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                  Scene preview (slideshow)
+                </summary>
+                <div className="mt-3">
+                  <VideoSlideshow scenes={previewScenes} audioUrl={previewAudio} />
+                </div>
+              </details>
             </div>
           )}
 
