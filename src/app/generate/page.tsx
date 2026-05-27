@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import Sidebar from '@/components/Sidebar'
 import AgentScoreCard from '@/components/AgentScoreCard'
+import VideoSlideshow from '@/components/VideoSlideshow'
 import { Sparkles, ArrowRight, RefreshCw, CheckCircle, AlertCircle, Loader2, Play } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -19,6 +20,12 @@ interface ReviewResult {
   fixes: string[]
   masterNotes: string
   round: number
+}
+
+interface SlideshowScene {
+  imageUrl: string
+  duration: number
+  caption?: string
 }
 
 const AGENT_ROLES: Record<string, string> = {
@@ -43,14 +50,15 @@ const STEP_LABELS: Record<Step, string> = {
 }
 
 export default function GeneratePage() {
-  const [prompt, setPrompt]             = useState('')
-  const [enhanced, setEnhanced]         = useState('')
-  const [useEnhanced, setUseEnhanced]   = useState(true)
-  const [step, setStep]                 = useState<Step>('idle')
-  const [review, setReview]             = useState<ReviewResult | null>(null)
-  const [videoUrl, setVideoUrl]         = useState('')
-  const [videoId, setVideoId]           = useState('')
-  const [error, setError]               = useState('')
+  const [prompt, setPrompt]               = useState('')
+  const [enhanced, setEnhanced]           = useState('')
+  const [useEnhanced, setUseEnhanced]     = useState(true)
+  const [step, setStep]                   = useState<Step>('idle')
+  const [review, setReview]               = useState<ReviewResult | null>(null)
+  const [previewScenes, setPreviewScenes] = useState<SlideshowScene[]>([])
+  const [previewAudio, setPreviewAudio]   = useState<string | null>(null)
+  const [videoId, setVideoId]             = useState('')
+  const [error, setError]                 = useState('')
 
   async function enhancePrompt() {
     if (!prompt.trim()) return
@@ -58,14 +66,20 @@ export default function GeneratePage() {
     setError('')
     setEnhanced('')
     setReview(null)
-    setVideoUrl('')
+    setPreviewScenes([])
 
-    const res = await fetch('/api/enhance-prompt', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
-    })
-    const data = await res.json()
-    setEnhanced(data.enhanced ?? '')
+    try {
+      const res = await fetch('/api/enhance-prompt', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+      const data = await res.json()
+      setEnhanced(data.enhanced ?? prompt)
+    } catch {
+      setEnhanced(prompt)
+    } finally {
+      setStep('idle')
+    }
   }
 
   async function generate() {
@@ -75,18 +89,16 @@ export default function GeneratePage() {
     setStep('scripting')
     setError('')
     setReview(null)
-    setVideoUrl('')
+    setPreviewScenes([])
+    setPreviewAudio(null)
 
     try {
-      // 1. Create video record
-      const { createClient } = await import('@/lib/supabase/client')
-      const db = createClient()
-      const { data: video } = await db.from('videos').insert({
-        topic:           finalPrompt.slice(0, 100),
-        original_prompt: prompt,
-        enhanced_prompt: enhanced,
-        status:          'generating',
-      }).select().single()
+      // 1. Create video record via server route (avoids anon key JWT issues)
+      const videoRes = await fetch('/api/create-video', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ original_prompt: prompt, enhanced_prompt: enhanced, topic: finalPrompt.slice(0, 100) }),
+      })
+      const video = await videoRes.json()
       const vid = video?.id ?? ''
       setVideoId(vid)
 
@@ -118,7 +130,7 @@ export default function GeneratePage() {
       })
       const { audioUrl } = await voiceRes.json()
 
-      // 5. Assemble video
+      // 5. Assemble video (returns previewMode assets — no FFmpeg on Vercel)
       setStep('assembling')
       const assembleRes = await fetch('/api/assemble-video', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -130,8 +142,12 @@ export default function GeneratePage() {
           audioUrl,
         }),
       })
-      const { mp4Url } = await assembleRes.json()
-      setVideoUrl(mp4Url ?? '')
+      const assembleData = await assembleRes.json()
+
+      if (assembleData.previewMode) {
+        setPreviewScenes(assembleData.scenes ?? scenesWithImages)
+        setPreviewAudio(assembleData.audioUrl ?? audioUrl ?? null)
+      }
 
       // 6. Run agent review council
       setStep('reviewing')
@@ -154,7 +170,9 @@ export default function GeneratePage() {
 
     } catch (err) {
       setStep('error')
-      setError((err as Error).message)
+      const msg = (err as Error).message ?? 'Unknown error'
+      setError(msg)
+      console.error('[generate]', msg)
     }
   }
 
@@ -181,7 +199,14 @@ export default function GeneratePage() {
               placeholder="e.g. Why our AI tool saves marketing teams 10 hours a week"
               rows={3}
               disabled={isRunning}
-              className="w-full bg-surface-DEFAULT border border-surface-border rounded-lg px-4 py-3 text-sm text-white placeholder-zinc-600 resize-none focus:outline-none focus:border-brand-500 disabled:opacity-50"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm placeholder-zinc-600 resize-none focus:outline-none focus:border-brand-500 disabled:opacity-50"
+              style={{
+                color: '#ffffff',
+                backgroundColor: '#111111',
+                WebkitTextFillColor: '#ffffff',
+                WebkitAppearance: 'none',
+                caretColor: '#ffffff',
+              }}
             />
 
             <button
@@ -239,9 +264,8 @@ export default function GeneratePage() {
               {(['scripting','imaging','voicing','assembling','reviewing'] as Step[]).map((s, i) => {
                 const steps: Step[] = ['scripting','imaging','voicing','assembling','reviewing']
                 const idx = steps.indexOf(step)
-                const thisIdx = i
-                const done = thisIdx < idx
-                const active = thisIdx === idx
+                const done   = i < idx
+                const active = i === idx
                 return (
                   <div key={s} className={clsx(
                     'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm',
@@ -270,17 +294,11 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {/* Video preview */}
-          {videoUrl && (
+          {/* Video slideshow preview */}
+          {previewScenes.length > 0 && (
             <div className="mt-8">
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Preview</h2>
-              <div className="bg-surface-card border border-surface-border rounded-2xl overflow-hidden">
-                <video
-                  src={videoUrl}
-                  controls
-                  className="w-full max-h-[500px] object-contain bg-black"
-                />
-              </div>
+              <VideoSlideshow scenes={previewScenes} audioUrl={previewAudio} />
             </div>
           )}
 
@@ -340,8 +358,10 @@ export default function GeneratePage() {
                     <Play size={14} />
                     Schedule for Publishing
                   </button>
-                  <button onClick={() => { setStep('idle'); setReview(null); setVideoUrl(''); setEnhanced(''); setPrompt('') }}
-                    className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors">
+                  <button
+                    onClick={() => { setStep('idle'); setReview(null); setPreviewScenes([]); setPreviewAudio(null); setEnhanced(''); setPrompt('') }}
+                    className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors"
+                  >
                     New Video
                   </button>
                 </div>
