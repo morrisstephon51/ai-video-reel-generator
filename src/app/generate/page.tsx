@@ -60,12 +60,18 @@ export default function GeneratePage() {
     setReview(null)
     setVideoUrl('')
 
-    const res = await fetch('/api/enhance-prompt', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
-    })
-    const data = await res.json()
-    setEnhanced(data.enhanced ?? '')
+    try {
+      const res = await fetch('/api/enhance-prompt', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+      const data = await res.json()
+      setEnhanced(data.enhanced ?? prompt)
+    } catch {
+      setEnhanced(prompt)
+    } finally {
+      setStep('idle')
+    }
   }
 
   async function generate() {
@@ -152,7 +158,9 @@ export default function GeneratePage() {
 
     } catch (err) {
       setStep('error')
-      setError((err as Error).message)
+      const msg = (err as Error).message ?? 'Unknown error'
+      setError(msg)
+      console.error('[generate]', msg)
     }
   }
 
@@ -180,7 +188,13 @@ export default function GeneratePage() {
               rows={3}
               disabled={isRunning}
               className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm placeholder-zinc-600 resize-none focus:outline-none focus:border-brand-500 disabled:opacity-50"
-              style={{ color: '#ffffff', backgroundColor: '#111111' }}
+              style={{
+                color: '#ffffff',
+                backgroundColor: '#111111',
+                WebkitTextFillColor: '#ffffff',
+                WebkitAppearance: 'none',
+                caretColor: '#ffffff',
+              }}
             />
 
             <button
