@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Sidebar from '@/components/Sidebar'
 import AgentScoreCard from '@/components/AgentScoreCard'
 import VideoSlideshow from '@/components/VideoSlideshow'
+import VideoRenderer from '@/components/VideoRenderer'
 import { Sparkles, ArrowRight, RefreshCw, CheckCircle, AlertCircle, Loader2, Play } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -57,7 +58,6 @@ export default function GeneratePage() {
   const [review, setReview]               = useState<ReviewResult | null>(null)
   const [previewScenes, setPreviewScenes] = useState<SlideshowScene[]>([])
   const [previewAudio, setPreviewAudio]   = useState<string | null>(null)
-  const [videoId, setVideoId]             = useState('')
   const [error, setError]                 = useState('')
 
   async function enhancePrompt() {
@@ -100,7 +100,6 @@ export default function GeneratePage() {
       })
       const video = await videoRes.json()
       const vid = video?.id ?? ''
-      setVideoId(vid)
 
       // 2. Generate script
       const scriptRes = await fetch('/api/generate-script', {
@@ -108,6 +107,7 @@ export default function GeneratePage() {
         body: JSON.stringify({ prompt: finalPrompt, videoId: vid }),
       })
       const script = await scriptRes.json()
+      if (script.error) throw new Error(`Script generation failed: ${script.error}`)
 
       // 3. Generate images for all scenes in parallel
       setStep('imaging')
@@ -130,7 +130,7 @@ export default function GeneratePage() {
       })
       const { audioUrl } = await voiceRes.json()
 
-      // 5. Assemble video (returns previewMode assets — no FFmpeg on Vercel)
+      // 5. Assemble (returns previewMode assets — no FFmpeg on Vercel)
       setStep('assembling')
       const assembleRes = await fetch('/api/assemble-video', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -294,11 +294,22 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {/* Video slideshow preview */}
+          {/* Video output — renderer (real MP4) + slideshow preview */}
           {previewScenes.length > 0 && (
-            <div className="mt-8">
-              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Preview</h2>
-              <VideoSlideshow scenes={previewScenes} audioUrl={previewAudio} />
+            <div className="mt-8 space-y-6">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Create Your Video</h2>
+                <VideoRenderer scenes={previewScenes} audioUrl={previewAudio} />
+              </div>
+              <details className="group">
+                <summary className="text-xs text-zinc-500 cursor-pointer select-none hover:text-zinc-400 list-none flex items-center gap-1">
+                  <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+                  Scene preview (slideshow)
+                </summary>
+                <div className="mt-3">
+                  <VideoSlideshow scenes={previewScenes} audioUrl={previewAudio} />
+                </div>
+              </details>
             </div>
           )}
 
@@ -319,12 +330,10 @@ export default function GeneratePage() {
                 </div>
               </div>
 
-              {/* Master verdict */}
               <div className="bg-surface-card border border-surface-border rounded-xl p-4 mb-4">
                 <p className="text-xs text-zinc-400 leading-relaxed">{review.masterNotes}</p>
               </div>
 
-              {/* Agent scores */}
               <div className="grid grid-cols-1 gap-3">
                 {(Object.keys(review.agentScores) as Array<keyof AgentScores>).map(agent => (
                   <AgentScoreCard
@@ -337,7 +346,6 @@ export default function GeneratePage() {
                 ))}
               </div>
 
-              {/* Fixes */}
               {review.fixes.length > 0 && (
                 <div className="mt-4 bg-surface-card border border-surface-border rounded-xl p-4">
                   <p className="text-xs font-semibold text-zinc-400 mb-2">Suggested fixes</p>

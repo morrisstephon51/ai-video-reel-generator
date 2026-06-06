@@ -1,27 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
-import { withResilience } from '@/lib/errors'
 import { createServiceClient } from '@/lib/supabase/server'
+
+const DEFAULT_STYLE = 'confident, bold, conversational tone. Hook patterns: "Did you know...", "The #1 mistake...", "Here\'s why..."'
 
 export async function POST(req: NextRequest) {
   const { prompt } = await req.json()
   if (!prompt) return NextResponse.json({ error: 'prompt required' }, { status: 400 })
 
-  const db = createServiceClient()
-  const { data: profile } = await db
-    .from('style_profiles')
-    .select('*')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .single()
+  let styleContext = DEFAULT_STYLE
+  try {
+    const db = createServiceClient()
+    const { data: profile } = await db
+      .from('style_profiles')
+      .select('tone, hook_patterns, niche')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single()
+    if (profile) {
+      styleContext = `Brand tone: ${profile.tone}. Hook patterns: ${JSON.stringify(profile.hook_patterns)}. Niche: ${profile.niche}.`
+    }
+  } catch { /* use default style */ }
 
-  const styleContext = profile
-    ? `Brand tone: ${profile.tone}. Hook patterns: ${JSON.stringify(profile.hook_patterns)}. Niche: ${profile.niche}.`
-    : 'No style profile yet — use a bold, confident, conversational tone.'
-
-  const result = await withResilience('enhance-prompt', async () => {
+  try {
     const raw = await chat(
-      `You are a viral content strategist. Your job is to enhance a user's content prompt for maximum virality and engagement — WITHOUT removing or replacing any of their core ideas.
+      `You are a viral content strategist. Enhance the user's content prompt for maximum virality WITHOUT removing any core ideas.
 
       ${styleContext}
 
@@ -30,14 +33,14 @@ export async function POST(req: NextRequest) {
       - Add a strong curiosity hook at the start
       - Layer in emotional triggers (FOMO, surprise, aspiration, relatability)
       - Make it specific and vivid, not generic
-      - Keep it punchy — the enhanced prompt should be 1-3 sentences
+      - Keep it punchy — 1-3 sentences max
 
       Respond in JSON: { "enhanced": "...", "hook": "...", "reasoning": "..." }`,
       `Original prompt: "${prompt}"`,
       true
     )
-    return JSON.parse(raw)
-  })
-
-  return NextResponse.json(result)
+    return NextResponse.json(JSON.parse(raw))
+  } catch (err) {
+    return NextResponse.json({ enhanced: prompt, hook: '', reasoning: 'Enhancement unavailable' })
+  }
 }

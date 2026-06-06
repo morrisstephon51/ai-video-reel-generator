@@ -77,7 +77,6 @@ export default function VideoSlideshow({ scenes, audioUrl, aspectRatio = '9:16' 
   return (
     <div className="w-full">
       <div className={`relative ${aspectClass} max-w-sm mx-auto bg-black rounded-2xl overflow-hidden shadow-2xl`}>
-        {/* Scene image */}
         {scene?.imageUrl ? (
           <img
             key={scene.imageUrl}
@@ -91,19 +90,16 @@ export default function VideoSlideshow({ scenes, audioUrl, aspectRatio = '9:16' 
           </div>
         )}
 
-        {/* Caption overlay */}
         {scene?.caption && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
             <p className="text-white text-sm font-semibold text-center leading-snug">{scene.caption}</p>
           </div>
         )}
 
-        {/* Scene counter */}
         <div className="absolute top-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
           {currentIndex + 1} / {scenes.length}
         </div>
 
-        {/* Progress bar */}
         <div className="absolute top-0 left-0 right-0 flex gap-1 p-2">
           {scenes.map((_, i) => (
             <div key={i} className="flex-1 h-0.5 rounded-full bg-white/30 overflow-hidden">
@@ -116,7 +112,6 @@ export default function VideoSlideshow({ scenes, audioUrl, aspectRatio = '9:16' 
         </div>
       </div>
 
-      {/* Controls */}
       <div className="flex items-center justify-center gap-4 mt-4">
         <button
           onClick={restart}
@@ -133,7 +128,6 @@ export default function VideoSlideshow({ scenes, audioUrl, aspectRatio = '9:16' 
         </button>
       </div>
 
-      {/* Hidden audio */}
       {audioUrl && (
         <audio ref={audioRef} src={audioUrl} preload="auto" />
       )}
