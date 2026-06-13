@@ -12,9 +12,10 @@ interface VideoSlideshowProps {
   scenes: Scene[]
   audioUrl?: string | null
   aspectRatio?: string
+  textScale?: number
 }
 
-export default function VideoSlideshow({ scenes, audioUrl, aspectRatio = '9:16' }: VideoSlideshowProps) {
+export default function VideoSlideshow({ scenes, audioUrl, aspectRatio = '9:16', textScale = 1 }: VideoSlideshowProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [playing, setPlaying]           = useState(false)
   const [ended, setEnded]               = useState(false)
@@ -92,7 +93,10 @@ export default function VideoSlideshow({ scenes, audioUrl, aspectRatio = '9:16' 
 
         {scene?.caption && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-            <p className="text-white text-sm font-semibold text-center leading-snug">{scene.caption}</p>
+            <p
+              className="text-white font-semibold text-center leading-snug"
+              style={{ fontSize: Math.round(14 * textScale) }}
+            >{scene.caption}</p>
           </div>
         )}
 

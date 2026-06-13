@@ -59,6 +59,7 @@ export default function GeneratePage() {
   const [previewScenes, setPreviewScenes] = useState<SlideshowScene[]>([])
   const [previewAudio, setPreviewAudio]   = useState<string | null>(null)
   const [error, setError]                 = useState('')
+  const [textScale, setTextScale]         = useState(1.0)
 
   async function enhancePrompt() {
     if (!prompt.trim()) return
@@ -297,9 +298,27 @@ export default function GeneratePage() {
           {/* Video output — renderer (real MP4) + slideshow preview */}
           {previewScenes.length > 0 && (
             <div className="mt-8 space-y-6">
+              {/* Text size control */}
+              <div className="bg-surface-card border border-surface-border rounded-xl px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-zinc-400 shrink-0">Caption Size</span>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2.0}
+                    step={0.1}
+                    value={textScale}
+                    onChange={e => setTextScale(parseFloat(e.target.value))}
+                    className="flex-1 accent-brand-500 h-1.5 cursor-pointer"
+                  />
+                  <span className="text-xs text-zinc-300 w-8 text-right tabular-nums">{textScale.toFixed(1)}×</span>
+                </div>
+                <p className="text-xs text-zinc-600 mt-1.5">Adjust caption text size before rendering your video</p>
+              </div>
+
               <div>
                 <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Create Your Video</h2>
-                <VideoRenderer scenes={previewScenes} audioUrl={previewAudio} />
+                <VideoRenderer scenes={previewScenes} audioUrl={previewAudio} textScale={textScale} />
               </div>
               <details className="group">
                 <summary className="text-xs text-zinc-500 cursor-pointer select-none hover:text-zinc-400 list-none flex items-center gap-1">
@@ -307,7 +326,7 @@ export default function GeneratePage() {
                   Scene preview (slideshow)
                 </summary>
                 <div className="mt-3">
-                  <VideoSlideshow scenes={previewScenes} audioUrl={previewAudio} />
+                  <VideoSlideshow scenes={previewScenes} audioUrl={previewAudio} textScale={textScale} />
                 </div>
               </details>
             </div>

@@ -12,6 +12,7 @@ interface Props {
   scenes: Scene[]
   audioUrl?: string | null
   aspectRatio?: string
+  textScale?: number
 }
 
 function proxyUrl(url: string) {
@@ -28,14 +29,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-function drawCaption(ctx: CanvasRenderingContext2D, caption: string, w: number, h: number) {
+function drawCaption(ctx: CanvasRenderingContext2D, caption: string, w: number, h: number, textScale = 1) {
   const grad = ctx.createLinearGradient(0, h * 0.6, 0, h)
   grad.addColorStop(0, 'rgba(0,0,0,0)')
   grad.addColorStop(1, 'rgba(0,0,0,0.85)')
   ctx.fillStyle = grad
   ctx.fillRect(0, h * 0.6, w, h * 0.4)
 
-  const fontSize = Math.round(h * 0.038)
+  const fontSize = Math.round(h * 0.038 * textScale)
   ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
   ctx.fillStyle = 'white'
   ctx.textAlign = 'center'
@@ -60,7 +61,7 @@ function drawCaption(ctx: CanvasRenderingContext2D, caption: string, w: number, 
   ctx.shadowBlur = 0
 }
 
-export default function VideoRenderer({ scenes, audioUrl, aspectRatio = '9:16' }: Props) {
+export default function VideoRenderer({ scenes, audioUrl, aspectRatio = '9:16', textScale = 1 }: Props) {
   const [status, setStatus]     = useState<'idle' | 'rendering' | 'done' | 'error'>('idle')
   const [sceneIdx, setSceneIdx] = useState(0)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
@@ -132,7 +133,7 @@ export default function VideoRenderer({ scenes, audioUrl, aspectRatio = '9:16' }
           sy = (img.height - sh) / 2
         }
         ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
-        if (scene.caption) drawCaption(ctx, scene.caption, w, h)
+        if (scene.caption) drawCaption(ctx, scene.caption, w, h, textScale)
 
         await new Promise(r => setTimeout(r, (scene.duration ?? 4) * 1000))
       }
