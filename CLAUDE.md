@@ -56,6 +56,26 @@ Stack: Next.js 14 · TypeScript · Tailwind · Supabase · Groq (Llama 3.3 70B) 
 
 ---
 
+## /btw — Clarity Interview
+
+Auto-trigger this before executing any task where scope is fuzzy, the goal is ambiguous, or "done" isn't obviously measurable. Words like "overhaul", "improve", "rethink", "clean up" are signals.
+
+Ask all four questions in ONE message, conversational tone:
+
+1. **Goal / Why** — What outcome do you actually want? What's the business reason this matters?
+2. **Constraints** — What must NOT change? What's already decided or off-limits?
+3. **Success criteria** — How will you know when this is done and done *right*?
+4. **Priority / Tradeoffs** — If something has to be cut, what matters most?
+
+After the answers, synthesize into a 3-line brief and confirm before building:
+```
+Outcome:    [what we're building and why]
+Guardrails: [what's off-limits / what stays fixed]
+Done when:  [specific measurable finish line]
+```
+
+---
+
 ## Task Execution Protocol
 
 Every task follows this sequence — no shortcuts:
