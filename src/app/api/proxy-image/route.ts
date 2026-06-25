@@ -2,11 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 30
 
-// Fetches an image URL server-side and returns the binary with CORS headers.
+const ALLOWED_HOSTS = new Set(['image.pollinations.ai', 'pollinations.ai'])
+
+function isAllowedUrl(raw: string): boolean {
+  try {
+    const u = new URL(decodeURIComponent(raw))
+    return (u.protocol === 'https:' || u.protocol === 'http:') && ALLOWED_HOSTS.has(u.hostname)
+  } catch {
+    return false
+  }
+}
+
+// Fetches a Pollinations.ai image server-side and returns the binary with CORS headers.
 // This lets the browser use the image on a canvas without cross-origin tainting.
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url')
   if (!url) return NextResponse.json({ error: 'url required' }, { status: 400 })
+  if (!isAllowedUrl(url)) return NextResponse.json({ error: 'url not allowed' }, { status: 400 })
 
   try {
     const res = await fetch(decodeURIComponent(url), {
