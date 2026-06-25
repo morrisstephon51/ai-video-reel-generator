@@ -8,6 +8,7 @@ import os from 'os'
 export async function POST(req: NextRequest) {
   const { text, videoId } = await req.json()
   if (!text) return NextResponse.json({ error: 'text required' }, { status: 400 })
+  if (text.length > 5000) return NextResponse.json({ error: 'text too long (max 5000 chars)' }, { status: 400 })
 
   try {
     const gTTS = (await import('node-gtts')).default
