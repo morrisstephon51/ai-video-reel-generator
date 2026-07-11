@@ -31,6 +31,7 @@ export default function QueuePage() {
   const [loading, setLoading]     = useState(true)
   const [processing, setProcessing] = useState(false)
   const [copied, setCopied]       = useState('')
+  const [notice, setNotice]       = useState('')
 
   async function load() {
     setLoading(true)
@@ -46,9 +47,14 @@ export default function QueuePage() {
 
   async function processNow() {
     setProcessing(true)
+    setNotice('')
     try {
-      await fetch('/api/cron/publish', { method: 'POST' })
-      await load()
+      const res = await fetch('/api/cron/publish', { method: 'POST' })
+      if (res.status === 401) {
+        setNotice('Manual processing is locked because CRON_SECRET is set — due posts publish automatically on the daily cron.')
+      } else {
+        await load()
+      }
     } catch { /* surfaced via statuses */ }
     setProcessing(false)
   }
@@ -90,6 +96,12 @@ export default function QueuePage() {
               </button>
             </div>
           </div>
+
+          {notice && (
+            <div className="mb-4 bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3">
+              <p className="text-xs text-blue-400">{notice}</p>
+            </div>
+          )}
 
           {loading && !queue.length ? (
             <div className="text-center py-20">
