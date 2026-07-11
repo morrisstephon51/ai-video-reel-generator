@@ -1,4 +1,39 @@
-# AI Video Reel Generator — Build Plan
+# Content Automation Build — trends → generate → package → clips → schedule → post
+
+Goal: mold the generator into the full content machine: research trending
+topics, write scripts, edit + clip video, generate titles + thumbnails per
+platform, schedule, and post — with an avatar mode that makes the AI visuals
+look like the creator from a single uploaded video of themselves.
+
+## Plan
+
+- [x] 1. Schema: add `personas` + `content_queue` tables to `src/lib/db/schema.sql`
+- [x] 2. Trends page `/trends`: scored trending topics (existing trend-intelligence agent) with one-click "Make video" → `/generate?topic=`
+- [x] 3. Persona API `/api/persona` (GET/POST/DELETE): store a reference frame in Supabase storage; `PersonaUpload` component extracts a frame from an uploaded video/photo client-side
+- [x] 4. Avatar mode in pipeline: `generate-script` writes creator-on-camera scenes when `avatarMode`; `generate-image` uses Pollinations `kontext` image-to-image with the persona reference, falling back to standard generation
+- [x] 5. Packaging `/api/package`: per-platform title, description, caption, hashtags (Groq) + CTR thumbnail (Pollinations); `PlatformPackages` component with thumbnail headline overlay + PNG download
+- [x] 6. Clip exports: extract shared client render engine to `src/lib/render.ts`; `ClipExporter` renders any single scene as its own clip with offset-synced audio
+- [x] 7. Upload `/api/upload-video`: signed-URL flow (rendered blob → Supabase storage → `exports` row) — bypasses Vercel's 4.5MB body limit, keys stay server-side
+- [x] 8. Schedule `/api/schedule` (POST/GET): queue per-platform posts into `content_queue` using best-time slots from schedule-optimizer
+- [x] 9. Publisher `/api/cron/publish` + `src/lib/connectors.ts`: processes due posts; YouTube auto-upload when OAuth env vars present, otherwise marks post `ready` with a one-tap manual bundle
+- [x] 10. Queue page `/queue`: live queue with statuses, copy caption, download video/thumbnail, "process now"
+- [x] 11. Wire generate page: topic prefill, avatar toggle, packages after approval, "Schedule for Publishing" does upload → package → schedule
+- [x] 12. vercel.json cron (daily 14:00 UTC — Hobby tier limit) + Sidebar links
+- [x] 13. Verify: `npm run build` clean (31 routes, types + lint pass)
+
+## Constraints
+- 100% free services only. No FFmpeg. All DB via server routes. Every route try/catch + fallback.
+- Avatar = the user's own likeness only (self-persona), generated from their own upload.
+
+## Results / follow-ups
+- Build passes clean: 8 new API routes, 2 new pages, 4 new components, shared render engine.
+- Fixed pre-existing build blocker: Groq client was instantiated at module scope, so any build without GROQ_API_KEY failed. Now lazy.
+- ACTION NEEDED: the Supabase project referenced by the old schema (`bdltwswwxnzbdkmortai`) no longer exists — the live app is running on DB fallbacks. Create/pick a project, run `src/lib/db/schema.sql`, and set `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in Vercel. Persona storage + publish queue need this.
+- Optional: set `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` in Vercel to enable fully automatic YouTube posting; other platforms produce one-tap ready bundles (their APIs are app-review-gated).
+
+---
+
+# AI Video Reel Generator — Original Build Plan
 
 ## Revised Company Prompt
 

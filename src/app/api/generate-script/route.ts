@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'GROQ_API_KEY is not set on the server. Add it in your Vercel project environment variables.' }, { status: 500 })
   }
 
-  const { prompt, videoId } = await req.json()
+  const { prompt, videoId, avatarMode } = await req.json()
   if (!prompt) return NextResponse.json({ error: 'prompt required' }, { status: 400 })
 
   // Load style profile — non-blocking
@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
         "cta": "call to action text"
       }
 
-      Generate 5-8 scenes. Each visual_prompt should be a detailed image generation prompt.`,
+      Generate 5-8 scenes. Each visual_prompt should be a detailed image generation prompt.${avatarMode ? `
+
+      AVATAR MODE: The creator appears on camera. Every visual_prompt must describe the creator as the on-screen subject — what they are doing, their expression, the setting, camera angle — written so an image model with a reference photo of the creator can render them (e.g. "speaking directly to camera in a bright home office, confident smile, medium close-up"). Never describe their physical features; the reference image supplies those.` : ''}`,
       `Create a video about: "${prompt}"`,
       true
     )

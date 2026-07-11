@@ -1,5 +1,5 @@
--- Run this in your Supabase SQL editor at:
--- https://supabase.com/dashboard/project/bdltwswwxnzbdkmortai/sql/new
+-- Run this in your Supabase project's SQL editor (Dashboard → SQL → New query),
+-- then set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in Vercel to match.
 
 -- Style profile (the AI's learned brand voice)
 create table if not exists style_profiles (
@@ -163,6 +163,34 @@ create table if not exists self_improvements (
   applied      boolean not null default false,
   verified     boolean not null default false,
   created_at   timestamptz not null default now()
+);
+
+-- Creator persona (avatar mode reference image, extracted from the user's own video)
+create table if not exists personas (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null default 'Me',
+  image_url   text not null,
+  description text,
+  created_at  timestamptz not null default now()
+);
+
+-- Per-platform publish queue (self-contained: no OAuth rows required to schedule)
+create table if not exists content_queue (
+  id            uuid primary key default gen_random_uuid(),
+  video_id      uuid references videos(id) on delete set null,
+  platform      text not null,
+  title         text not null,
+  description   text,
+  caption       text,
+  hashtags      jsonb not null default '[]',
+  thumbnail_url text,
+  video_url     text,
+  scheduled_at  timestamptz not null,
+  posted_at     timestamptz,
+  status        text not null default 'queued', -- queued | ready | posted | failed
+  platform_post_id text,
+  last_error    text,
+  created_at    timestamptz not null default now()
 );
 
 -- Seed default style profile
