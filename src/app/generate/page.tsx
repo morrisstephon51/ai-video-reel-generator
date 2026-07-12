@@ -380,14 +380,14 @@ export default function GeneratePage() {
               )}
 
               {review.decision === 'approve' && (
-                <div className="mt-4 flex gap-3">
-                  <button className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-3 rounded-xl transition-colors">
-                    <Play size={14} />
-                    Schedule for Publishing
-                  </button>
+                <div className="mt-4 space-y-3">
+                  <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 flex items-start gap-2">
+                    <CheckCircle size={14} className="text-green-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-green-300">Council approved — use the <span className="font-semibold">Render &amp; Download</span> button above to save your video.</p>
+                  </div>
                   <button
                     onClick={() => { setStep('idle'); setReview(null); setPreviewScenes([]); setPreviewAudio(null); setEnhanced(''); setPrompt('') }}
-                    className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors"
                   >
                     New Video
                   </button>
