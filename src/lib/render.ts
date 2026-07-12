@@ -99,14 +99,17 @@ export async function renderScenes({
   const stream = canvas.captureStream(30)
 
   let audioEl: HTMLAudioElement | null = null
+  let audioCtx: AudioContext | null = null
   if (audioUrl) {
     audioEl = new Audio(audioUrl)
-    const audioCtx = new AudioContext()
+    audioCtx = new AudioContext()
     const src = audioCtx.createMediaElementSource(audioEl)
     const dest = audioCtx.createMediaStreamDestination()
     src.connect(dest)
     src.connect(audioCtx.destination)
     stream.addTrack(dest.stream.getAudioTracks()[0])
+    // Not awaited: a policy-suspended context would leave this promise pending forever
+    audioCtx.resume().catch(() => {})
   }
 
   // Pick best supported container (MP4 on Safari, WebM on Chrome)
@@ -118,23 +121,30 @@ export async function renderScenes({
   recorder.ondataavailable = e => e.data.size > 0 && chunks.push(e.data)
   recorder.start(200)
 
-  if (audioEl) {
-    audioEl.currentTime = audioOffset
-    audioEl.play().catch(() => {})
-  }
+  try {
+    if (audioEl) {
+      audioEl.currentTime = audioOffset
+      audioEl.play().catch(() => {})
+    }
 
-  for (let i = 0; i < scenes.length; i++) {
-    onScene?.(i)
-    const scene = scenes[i]
-    const img = await loadImage(proxyUrl(scene.imageUrl))
-    drawSceneImage(ctx, img, w, h)
-    if (scene.caption) drawCaption(ctx, scene.caption, w, h, textScale)
-    await new Promise(r => setTimeout(r, (scene.duration ?? 4) * 1000))
-  }
+    for (let i = 0; i < scenes.length; i++) {
+      onScene?.(i)
+      const scene = scenes[i]
+      const img = await loadImage(proxyUrl(scene.imageUrl))
+      drawSceneImage(ctx, img, w, h)
+      if (scene.caption) drawCaption(ctx, scene.caption, w, h, textScale)
+      await new Promise(r => setTimeout(r, (scene.duration ?? 4) * 1000))
+    }
 
-  recorder.stop()
-  audioEl?.pause()
-  await new Promise<void>(r => { recorder.onstop = () => r() })
+    recorder.stop()
+    await new Promise<void>(r => { recorder.onstop = () => r() })
+  } finally {
+    // A mid-render failure must not leak a live recorder or AudioContext
+    // (browsers cap concurrent AudioContexts — leaks make later renders silent)
+    if (recorder.state !== 'inactive') recorder.stop()
+    audioEl?.pause()
+    audioCtx?.close().catch(() => {})
+  }
 
   const finalType = mime.startsWith('video/mp4') ? 'video/mp4' : 'video/webm'
   return {

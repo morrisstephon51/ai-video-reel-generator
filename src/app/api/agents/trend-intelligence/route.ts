@@ -3,6 +3,8 @@ import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
 import { createServiceClient } from '@/lib/supabase/server'
 
+export const maxDuration = 30
+
 interface Trend {
   topic: string
   score: number

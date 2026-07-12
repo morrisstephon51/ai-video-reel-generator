@@ -5,6 +5,8 @@ import path from 'path'
 import fs from 'fs/promises'
 import os from 'os'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const { text, videoId } = await req.json()
   if (!text) return NextResponse.json({ error: 'text required' }, { status: 400 })

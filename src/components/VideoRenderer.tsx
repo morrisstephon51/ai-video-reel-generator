@@ -30,6 +30,8 @@ export default function VideoRenderer({ scenes, audioUrl, aspectRatio = '9:16', 
         scenes, audioUrl, aspectRatio, textScale,
         onScene: setSceneIdx,
       })
+      // Only discard the previous render once the new one has succeeded
+      if (videoUrl) URL.revokeObjectURL(videoUrl)
       setExt(result.ext)
       setVideoUrl(URL.createObjectURL(result.blob))
       setStatus('done')
@@ -93,7 +95,7 @@ export default function VideoRenderer({ scenes, audioUrl, aspectRatio = '9:16', 
               Download {ext.toUpperCase()}
             </a>
             <button
-              onClick={() => { setStatus('idle'); setVideoUrl(null) }}
+              onClick={() => setStatus('idle')}
               className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors"
             >
               Re-render

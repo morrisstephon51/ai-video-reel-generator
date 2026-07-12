@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
 
+export const maxDuration = 30
+
 const PLATFORM_LIMITS: Record<string, { chars: number; style: string }> = {
   tiktok:    { chars: 2200, style: 'casual, trendy, emoji-friendly, Gen-Z tone' },
   instagram: { chars: 2200, style: 'visual storytelling, lifestyle, hashtag-heavy' },

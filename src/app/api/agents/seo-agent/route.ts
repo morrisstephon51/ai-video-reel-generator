@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
 
+export const maxDuration = 30
+
 export async function POST(req: NextRequest) {
   const { topic, script, platform } = await req.json()
   if (!topic) return NextResponse.json({ error: 'topic required' }, { status: 400 })

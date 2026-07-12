@@ -70,12 +70,13 @@ export default function PlatformPackages({ topic, hook, voiceover, hashtags, onP
   const [copied, setCopied]         = useState('')
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  async function build() {
+  async function build(signal?: AbortSignal) {
     setStatus('loading')
     try {
       const res = await fetch('/api/package', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, hook, voiceover, hashtags, platforms: ['youtube', 'tiktok', 'instagram', 'twitter', 'linkedin', 'facebook'] }),
+        signal,
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -84,12 +85,17 @@ export default function PlatformPackages({ topic, hook, voiceover, hashtags, onP
       setStatus('done')
       onPackaged?.(data.packages, data.thumbnailUrl)
     } catch (err) {
+      if (signal?.aborted) return
       console.error('[PlatformPackages]', err)
       setStatus('error')
     }
   }
 
-  useEffect(() => { build() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const ctl = new AbortController()
+    build(ctl.signal)
+    return () => ctl.abort()
+  }, [topic]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!thumbUrl || !canvasRef.current) return
@@ -121,7 +127,7 @@ export default function PlatformPackages({ topic, hook, voiceover, hashtags, onP
     return (
       <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center justify-between">
         <p className="text-xs text-red-400">Packaging failed</p>
-        <button onClick={build} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300">
+        <button onClick={() => build()} className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300">
           <RefreshCw size={11} /> Retry
         </button>
       </div>

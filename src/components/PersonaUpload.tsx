@@ -25,10 +25,21 @@ async function extractFrame(file: File): Promise<string> {
     const video = document.createElement('video')
     video.muted = true
     video.playsInline = true
+    video.preload = 'auto'
     video.src = objectUrl
-    await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej })
-    video.currentTime = Math.min(video.duration / 2, 3)
-    await new Promise((res, rej) => { video.onseeked = res; video.onerror = rej })
+    await new Promise((res, rej) => { video.onloadeddata = res; video.onerror = rej })
+    // iOS Safari paints black frames to canvas unless the video has played
+    await video.play().catch(() => {})
+    video.pause()
+    const target = Math.min((Number.isFinite(video.duration) ? video.duration : 6) / 2, 3)
+    if (Math.abs(video.currentTime - target) > 0.1) {
+      video.currentTime = target
+      await new Promise((res, rej) => {
+        const timer = setTimeout(res, 3000)
+        video.onseeked = () => { clearTimeout(timer); res(null) }
+        video.onerror = () => { clearTimeout(timer); rej(new Error('Could not read a frame from this video — try a different file')) }
+      })
+    }
     return frameToDataUrl(video, video.videoWidth, video.videoHeight)
   } finally {
     URL.revokeObjectURL(objectUrl)
