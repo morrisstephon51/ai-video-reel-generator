@@ -11,8 +11,15 @@ function buildImageUrl(prompt: string, width = 1080, height = 1920) {
   return `${POLLINATIONS_BASE}/${encoded}?width=${width}&height=${height}&nologo=true&enhance=true`
 }
 
+function buildPersonaUrl(prompt: string, personaUrl: string, width: number, height: number) {
+  const encoded = encodeURIComponent(
+    `The person from the reference image: ${prompt}. Keep the person's exact face and appearance, photorealistic, cinematic lighting, no text, no watermark`
+  )
+  return `${POLLINATIONS_BASE}/${encoded}?model=kontext&image=${encodeURIComponent(personaUrl)}&width=${width}&height=${height}&nologo=true`
+}
+
 export async function POST(req: NextRequest) {
-  const { prompt, aspectRatio = '9:16', sceneIndex = 0 } = await req.json()
+  const { prompt, aspectRatio = '9:16', sceneIndex = 0, personaUrl } = await req.json()
   if (!prompt) return NextResponse.json({ error: 'prompt required' }, { status: 400 })
 
   const dimensions: Record<string, { width: number; height: number }> = {
@@ -28,7 +35,9 @@ export async function POST(req: NextRequest) {
   const imageUrl = await withResilience(
     'generate-image-pollinations',
     async () => {
-      const url = `${buildImageUrl(prompt, width, height)}&seed=${seed}`
+      const url = personaUrl
+        ? `${buildPersonaUrl(prompt, personaUrl, width, height)}&seed=${seed}`
+        : `${buildImageUrl(prompt, width, height)}&seed=${seed}`
       // Verify the image endpoint responds
       const check = await fetch(url, { method: 'HEAD' })
       if (!check.ok) throw new Error(`Pollinations returned ${check.status}`)

@@ -1,12 +1,14 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Sparkles, Video, LayoutDashboard, Settings, Zap, BarChart2 } from 'lucide-react'
+import { Sparkles, Video, LayoutDashboard, Settings, Zap, BarChart2, TrendingUp, CalendarClock } from 'lucide-react'
 import clsx from 'clsx'
 
 const nav = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/trends',    icon: TrendingUp,      label: 'Trends'    },
   { href: '/generate',  icon: Sparkles,        label: 'Generate'  },
+  { href: '/queue',     icon: CalendarClock,   label: 'Queue'     },
   { href: '/library',   icon: Video,           label: 'Library'   },
   { href: '/analytics', icon: BarChart2,       label: 'Analytics' },
   { href: '/agents',    icon: Zap,             label: 'Agents'    },

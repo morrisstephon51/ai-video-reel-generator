@@ -1,10 +1,16 @@
 'use client'
-import { useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import AgentScoreCard from '@/components/AgentScoreCard'
 import VideoSlideshow from '@/components/VideoSlideshow'
 import VideoRenderer from '@/components/VideoRenderer'
-import { Sparkles, ArrowRight, RefreshCw, CheckCircle, AlertCircle, Loader2, Play } from 'lucide-react'
+import ClipExporter from '@/components/ClipExporter'
+import PersonaUpload from '@/components/PersonaUpload'
+import PlatformPackages, { PlatformPackage } from '@/components/PlatformPackages'
+import { RenderResult } from '@/lib/render'
+import { Sparkles, ArrowRight, RefreshCw, CheckCircle, AlertCircle, Loader2, Send, CalendarClock } from 'lucide-react'
 import clsx from 'clsx'
 
 type Step = 'idle' | 'enhancing' | 'scripting' | 'imaging' | 'voicing' | 'assembling' | 'reviewing' | 'done' | 'error'
@@ -29,6 +35,14 @@ interface SlideshowScene {
   caption?: string
 }
 
+interface ScriptMeta {
+  topic: string
+  title?: string
+  hook?: string
+  voiceover?: string
+  hashtags?: string[]
+}
+
 const AGENT_ROLES: Record<string, string> = {
   viral:      'Creative Director',
   design:     'Visual Designer',
@@ -50,7 +64,8 @@ const STEP_LABELS: Record<Step, string> = {
   error:      'Error occurred',
 }
 
-export default function GeneratePage() {
+function GenerateContent() {
+  const searchParams = useSearchParams()
   const [prompt, setPrompt]               = useState('')
   const [enhanced, setEnhanced]           = useState('')
   const [useEnhanced, setUseEnhanced]     = useState(true)
@@ -60,6 +75,23 @@ export default function GeneratePage() {
   const [previewAudio, setPreviewAudio]   = useState<string | null>(null)
   const [error, setError]                 = useState('')
   const [textScale, setTextScale]         = useState(1.0)
+
+  const [avatarMode, setAvatarMode]       = useState(false)
+  const [personaUrl, setPersonaUrl]       = useState<string | null>(null)
+
+  const [videoId, setVideoId]             = useState('')
+  const [scriptMeta, setScriptMeta]       = useState<ScriptMeta | null>(null)
+  const [renderResult, setRenderResult]   = useState<RenderResult | null>(null)
+  const [packages, setPackages]           = useState<PlatformPackage[]>([])
+  const [thumbnailUrl, setThumbnailUrl]   = useState('')
+
+  const [scheduleState, setScheduleState] = useState<'idle' | 'working' | 'done' | 'error'>('idle')
+  const [scheduleError, setScheduleError] = useState('')
+
+  useEffect(() => {
+    const topic = searchParams.get('topic')
+    if (topic) setPrompt(topic)
+  }, [searchParams])
 
   async function enhancePrompt() {
     if (!prompt.trim()) return
@@ -92,6 +124,9 @@ export default function GeneratePage() {
     setReview(null)
     setPreviewScenes([])
     setPreviewAudio(null)
+    setRenderResult(null)
+    setPackages([])
+    setScheduleState('idle')
 
     try {
       // 1. Create video record via server route (avoids anon key JWT issues)
@@ -101,14 +136,23 @@ export default function GeneratePage() {
       })
       const video = await videoRes.json()
       const vid = video?.id ?? ''
+      setVideoId(vid)
 
       // 2. Generate script
+      const useAvatar = avatarMode && !!personaUrl
       const scriptRes = await fetch('/api/generate-script', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: finalPrompt, videoId: vid }),
+        body: JSON.stringify({ prompt: finalPrompt, videoId: vid, avatarMode: useAvatar }),
       })
       const script = await scriptRes.json()
       if (script.error) throw new Error(`Script generation failed: ${script.error}`)
+      setScriptMeta({
+        topic: script.title ?? finalPrompt.slice(0, 100),
+        title: script.title,
+        hook: script.hook,
+        voiceover: script.voiceover,
+        hashtags: script.hashtags,
+      })
 
       // 3. Generate images for all scenes in parallel
       setStep('imaging')
@@ -116,7 +160,11 @@ export default function GeneratePage() {
         (script.scenes ?? []).map(async (scene: { visual_prompt: string; duration: number; caption: string }, i: number) => {
           const imgRes = await fetch('/api/generate-image', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: scene.visual_prompt, sceneIndex: i }),
+            body: JSON.stringify({
+              prompt: scene.visual_prompt,
+              sceneIndex: i,
+              personaUrl: useAvatar ? personaUrl : undefined,
+            }),
           })
           const { imageUrl } = await imgRes.json()
           return { ...scene, imageUrl }
@@ -177,6 +225,52 @@ export default function GeneratePage() {
     }
   }
 
+  async function schedulePublishing() {
+    if (!renderResult) {
+      setScheduleError('Render the full video first — the queue needs the finished file.')
+      setScheduleState('error')
+      return
+    }
+    if (!packages.length) {
+      setScheduleError('Platform packages are still generating — try again in a moment.')
+      setScheduleState('error')
+      return
+    }
+    setScheduleState('working')
+    setScheduleError('')
+    try {
+      const init = await fetch('/api/upload-video', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId, ext: renderResult.ext }),
+      }).then(r => r.json())
+      if (init.error) throw new Error(init.error)
+
+      const put = await fetch(init.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': renderResult.mimeType },
+        body: renderResult.blob,
+      })
+      if (!put.ok) throw new Error(`Video upload failed: ${put.status}`)
+
+      const done = await fetch('/api/upload-video', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete', videoId, path: init.path }),
+      }).then(r => r.json())
+      if (done.error) throw new Error(done.error)
+
+      const sched = await fetch('/api/schedule', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId, videoUrl: done.videoUrl, thumbnailUrl, packages }),
+      }).then(r => r.json())
+      if (sched.error) throw new Error(sched.error)
+
+      setScheduleState('done')
+    } catch (err) {
+      setScheduleError((err as Error).message)
+      setScheduleState('error')
+    }
+  }
+
   const isRunning = !['idle', 'done', 'error'].includes(step)
 
   return (
@@ -190,6 +284,12 @@ export default function GeneratePage() {
               Enter your idea — the AI enhances it, generates the video, and the agent council reviews it.
             </p>
           </div>
+
+          {/* Avatar persona */}
+          <PersonaUpload
+            enabled={avatarMode}
+            onChange={(on, url) => { setAvatarMode(on); setPersonaUrl(url) }}
+          />
 
           {/* Prompt input */}
           <div className="bg-surface-card border border-surface-border rounded-2xl p-6 mb-6">
@@ -255,7 +355,7 @@ export default function GeneratePage() {
             {isRunning ? (
               <><Loader2 size={16} className="animate-spin" />{STEP_LABELS[step]}</>
             ) : (
-              <><Sparkles size={16} />Generate Full Video<ArrowRight size={14} /></>
+              <><Sparkles size={16} />Generate Full Video{avatarMode && personaUrl ? ' — Starring You' : ''}<ArrowRight size={14} /></>
             )}
           </button>
 
@@ -295,7 +395,7 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {/* Video output — renderer (real MP4) + slideshow preview */}
+          {/* Video output — renderer (real MP4) + clips + slideshow preview */}
           {previewScenes.length > 0 && (
             <div className="mt-8 space-y-6">
               {/* Text size control */}
@@ -318,8 +418,16 @@ export default function GeneratePage() {
 
               <div>
                 <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Create Your Video</h2>
-                <VideoRenderer scenes={previewScenes} audioUrl={previewAudio} textScale={textScale} />
+                <VideoRenderer
+                  scenes={previewScenes}
+                  audioUrl={previewAudio}
+                  textScale={textScale}
+                  onRendered={setRenderResult}
+                />
               </div>
+
+              <ClipExporter scenes={previewScenes} audioUrl={previewAudio} textScale={textScale} />
+
               <details className="group">
                 <summary className="text-xs text-zinc-500 cursor-pointer select-none hover:text-zinc-400 list-none flex items-center gap-1">
                   <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
@@ -379,18 +487,55 @@ export default function GeneratePage() {
                 </div>
               )}
 
+              {/* Platform packaging: titles, captions, hashtags, thumbnail */}
+              {scriptMeta && (
+                <div className="mt-6">
+                  <PlatformPackages
+                    topic={scriptMeta.title ?? scriptMeta.topic}
+                    hook={scriptMeta.hook}
+                    voiceover={scriptMeta.voiceover}
+                    hashtags={scriptMeta.hashtags}
+                    onPackaged={(pkgs, thumb) => { setPackages(pkgs); setThumbnailUrl(thumb) }}
+                  />
+                </div>
+              )}
+
               {review.decision === 'approve' && (
-                <div className="mt-4 flex gap-3">
-                  <button className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-3 rounded-xl transition-colors">
-                    <Play size={14} />
-                    Schedule for Publishing
-                  </button>
-                  <button
-                    onClick={() => { setStep('idle'); setReview(null); setPreviewScenes([]); setPreviewAudio(null); setEnhanced(''); setPrompt('') }}
-                    className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors"
-                  >
-                    New Video
-                  </button>
+                <div className="mt-6">
+                  {scheduleState === 'done' ? (
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                      <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                        <CheckCircle size={14} /> Scheduled across all platforms
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Each platform got its own best-time slot. Track and post from the queue.
+                      </p>
+                      <Link href="/queue" className="mt-2 inline-flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300">
+                        <CalendarClock size={12} /> Open Publish Queue
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={schedulePublishing}
+                        disabled={scheduleState === 'working'}
+                        className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white text-sm font-medium py-3 rounded-xl transition-colors"
+                      >
+                        {scheduleState === 'working'
+                          ? <><Loader2 size={14} className="animate-spin" /> Uploading + scheduling...</>
+                          : <><Send size={14} /> Schedule for Publishing</>}
+                      </button>
+                      <button
+                        onClick={() => { setStep('idle'); setReview(null); setPreviewScenes([]); setPreviewAudio(null); setEnhanced(''); setPrompt(''); setRenderResult(null); setPackages([]); setScheduleState('idle') }}
+                        className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors"
+                      >
+                        New Video
+                      </button>
+                    </div>
+                  )}
+                  {scheduleState === 'error' && (
+                    <p className="text-xs text-red-400 mt-2">{scheduleError}</p>
+                  )}
                 </div>
               )}
 
@@ -408,5 +553,13 @@ export default function GeneratePage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function GeneratePage() {
+  return (
+    <Suspense>
+      <GenerateContent />
+    </Suspense>
   )
 }
