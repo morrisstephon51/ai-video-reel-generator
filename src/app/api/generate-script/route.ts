@@ -9,8 +9,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'GROQ_API_KEY is not set on the server. Add it in your Vercel project environment variables.' }, { status: 500 })
   }
 
-  const { prompt, videoId, avatarMode } = await req.json()
+  const { prompt, videoId, avatarMode, revision } = await req.json()
   if (!prompt) return NextResponse.json({ error: 'prompt required' }, { status: 400 })
+
+  // When the agent council asks for a revision, feed its notes back in rather than
+  // regenerating blindly — keep what scored well, fix only what was flagged
+  const revisionBlock = revision?.fixes?.length || revision?.notes
+    ? `
+
+      REVISION MODE — round ${revision.round ?? 2}. A review council scored the previous version and asked for specific fixes. Keep everything that already worked; change ONLY what the notes call out.
+      Previous script: "${String(revision.previousScript ?? '').slice(0, 600)}"
+      Master notes: ${String(revision.notes ?? '').slice(0, 400)}
+      Required fixes:
+      ${(revision.fixes ?? []).slice(0, 8).map((f: string, i: number) => `${i + 1}. ${f}`).join('\n')}`
+    : ''
 
   // Load style profile — non-blocking
   let profile: Record<string, string> | null = null
@@ -50,7 +62,7 @@ export async function POST(req: NextRequest) {
 
       Generate 5-8 scenes. Each visual_prompt should be a detailed image generation prompt.${avatarMode ? `
 
-      AVATAR MODE: The creator appears on camera. Every visual_prompt must describe the creator as the on-screen subject — what they are doing, their expression, the setting, camera angle — written so an image model with a reference photo of the creator can render them (e.g. "speaking directly to camera in a bright home office, confident smile, medium close-up"). Never describe their physical features; the reference image supplies those.` : ''}`,
+      AVATAR MODE: The creator appears on camera. Every visual_prompt must describe the creator as the on-screen subject — what they are doing, their expression, the setting, camera angle — written so an image model with a reference photo of the creator can render them (e.g. "speaking directly to camera in a bright home office, confident smile, medium close-up"). Never describe their physical features; the reference image supplies those.` : ''}${revisionBlock}`,
       `Create a video about: "${prompt}"`,
       true
     )
