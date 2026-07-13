@@ -115,10 +115,11 @@ function GenerateContent() {
     }
   }
 
-  async function generate() {
+  async function generate(revision?: { fixes: string[]; notes: string; previousScript: string; round: number }) {
     const finalPrompt = useEnhanced && enhanced ? enhanced : prompt
     if (!finalPrompt.trim()) return
 
+    const round = revision?.round ?? 1
     setStep('scripting')
     setError('')
     setReview(null)
@@ -138,11 +139,11 @@ function GenerateContent() {
       const vid = video?.id ?? ''
       setVideoId(vid)
 
-      // 2. Generate script
+      // 2. Generate script — pass council feedback on a revision round
       const useAvatar = avatarMode && !!personaUrl
       const scriptRes = await fetch('/api/generate-script', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: finalPrompt, videoId: vid, avatarMode: useAvatar }),
+        body: JSON.stringify({ prompt: finalPrompt, videoId: vid, avatarMode: useAvatar, revision }),
       })
       const script = await scriptRes.json()
       if (script.error) throw new Error(`Script generation failed: ${script.error}`)
@@ -210,7 +211,7 @@ function GenerateContent() {
           hashtags: script.hashtags,
           cta:     script.cta,
           hook:    script.hook,
-          round:   1,
+          round,
         }),
       })
       const reviewData = await reviewRes.json()
@@ -348,7 +349,7 @@ function GenerateContent() {
 
           {/* Generate button */}
           <button
-            onClick={generate}
+            onClick={() => generate()}
             disabled={!prompt.trim() || isRunning}
             className="w-full flex items-center justify-center gap-3 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-xl transition-colors text-sm"
           >
@@ -539,13 +540,28 @@ function GenerateContent() {
                 </div>
               )}
 
-              {(review.decision === 'revise' || review.decision === 'regenerate') && (
+              {review.decision === 'revise' && (
                 <button
-                  onClick={generate}
+                  onClick={() => generate({
+                    fixes: review.fixes ?? [],
+                    notes: review.masterNotes ?? '',
+                    previousScript: scriptMeta?.voiceover ?? '',
+                    round: (review.round ?? 1) + 1,
+                  })}
                   className="mt-4 w-full flex items-center justify-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-sm font-medium py-3 rounded-xl transition-colors"
                 >
                   <RefreshCw size={14} />
-                  {review.decision === 'revise' ? 'Auto-Revise with Agent Feedback' : 'Regenerate from Scratch'}
+                  Auto-Revise with Agent Feedback
+                </button>
+              )}
+
+              {review.decision === 'regenerate' && (
+                <button
+                  onClick={() => generate()}
+                  className="mt-4 w-full flex items-center justify-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-sm font-medium py-3 rounded-xl transition-colors"
+                >
+                  <RefreshCw size={14} />
+                  Regenerate from Scratch
                 </button>
               )}
             </div>

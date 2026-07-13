@@ -13,3 +13,10 @@ The Sidebar links to /analytics, /agents, /settings but none of those pages exis
 ## Constraints
 - 100% free. All DB via server routes / server components. Every route + page resilient to a missing DB (fallback, never crash the render).
 - Match the existing design system (Sidebar, surface-card, brand-500). No gold-plating.
+
+## Iteration 3b — close the autonomous-revision loop
+
+- [x] "Auto-Revise with Agent Feedback" now actually feeds the council's fixes + master notes + previous script back into `generate-script` (REVISION MODE keeps what scored well, changes only what was flagged) instead of `onClick={generate}` passing the click event and silently regenerating from scratch
+- [x] `generate()` threads an optional `revision` arg and a `round` counter into both script generation and the review call (so rounds are recorded, not always 1)
+- [x] Fixed latent bug: the main Generate + Regenerate buttons passed the MouseEvent as an argument — now `onClick={() => generate()}`
+- [x] Verify: `npm run build` clean (35 routes)
