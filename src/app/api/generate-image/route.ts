@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withResilience } from '@/lib/errors'
 
+export const maxDuration = 60
+
 // Pollinations.ai — completely free, no API key
 const POLLINATIONS_BASE = 'https://image.pollinations.ai/prompt'
 
@@ -32,23 +34,43 @@ export async function POST(req: NextRequest) {
   // Add variation seed per scene so scenes look different
   const seed = Date.now() + sceneIndex * 1000
 
-  const imageUrl = await withResilience(
+  // Pollinations generates the image during the HEAD check, so every attempt is time-bounded
+  const verifyImage = async (url: string) => {
+    const check = await fetch(url, { method: 'HEAD' })
+    if (!check.ok) throw new Error(`Pollinations returned ${check.status}`)
+    return url
+  }
+
+  const standardGeneration = () => withResilience(
     'generate-image-pollinations',
-    async () => {
-      const url = personaUrl
-        ? `${buildPersonaUrl(prompt, personaUrl, width, height)}&seed=${seed}`
-        : `${buildImageUrl(prompt, width, height)}&seed=${seed}`
-      // Verify the image endpoint responds
-      const check = await fetch(url, { method: 'HEAD' })
-      if (!check.ok) throw new Error(`Pollinations returned ${check.status}`)
-      return url
-    },
+    () => verifyImage(`${buildImageUrl(prompt, width, height)}&seed=${seed}`),
     // Fallback: different style prompt
     async () => {
       const fallbackPrompt = encodeURIComponent(`${prompt}, digital art, vibrant colors`)
       return `${POLLINATIONS_BASE}/${fallbackPrompt}?width=${width}&height=${height}&nologo=true&seed=${seed + 1}`
-    }
+    },
+    3,
+    15_000
   )
 
-  return NextResponse.json({ imageUrl })
+  let imageUrl: string
+  let persona = false
+  if (personaUrl) {
+    try {
+      imageUrl = await withResilience(
+        'generate-image-kontext',
+        () => verifyImage(`${buildPersonaUrl(prompt, personaUrl, width, height)}&seed=${seed}`),
+        undefined,
+        1,
+        30_000
+      )
+      persona = true
+    } catch {
+      imageUrl = await standardGeneration()
+    }
+  } else {
+    imageUrl = await standardGeneration()
+  }
+
+  return NextResponse.json({ imageUrl, persona })
 }

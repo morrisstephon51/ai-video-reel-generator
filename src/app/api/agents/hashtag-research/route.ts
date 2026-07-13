@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
 
+export const maxDuration = 30
+
 interface HashtagEntry {
   tag: string
   reach_score: number

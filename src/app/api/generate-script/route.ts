@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { createServiceClient } from '@/lib/supabase/server'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   if (!process.env.GROQ_API_KEY) {
     return NextResponse.json({ error: 'GROQ_API_KEY is not set on the server. Add it in your Vercel project environment variables.' }, { status: 500 })

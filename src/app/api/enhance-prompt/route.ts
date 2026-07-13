@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { createServiceClient } from '@/lib/supabase/server'
 
+export const maxDuration = 30
+
 const DEFAULT_STYLE = 'confident, bold, conversational tone. Hook patterns: "Did you know...", "The #1 mistake...", "Here\'s why..."'
 
 export async function POST(req: NextRequest) {

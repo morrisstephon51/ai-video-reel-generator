@@ -45,30 +45,44 @@ async function classifyError(err: CapturedError): Promise<{ type: ErrorClass; su
 }
 
 // Wraps any async fn with error capture + exponential backoff retry
+// timeoutMs bounds each individual attempt so one hung upstream call
+// can't consume the whole function budget and starve the retries/fallback
 export async function withResilience<T>(
   service: string,
   fn: () => Promise<T>,
   fallback?: () => Promise<T>,
-  retries = 3
+  retries = 3,
+  timeoutMs?: number
 ): Promise<T> {
   let lastError: Error | null = null
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      return await fn()
+      return await withTimeout(fn(), timeoutMs)
     } catch (err) {
       lastError = err as Error
-      const delay = Math.pow(2, attempt) * 500
-      await captureError({
+      // Fire-and-forget: classifyError makes an LLM call — never block the retry path on it
+      void captureError({
         service,
         message: lastError.message,
         stack:   lastError.stack,
         severity: attempt === retries - 1 ? 'high' : 'low',
       })
-      if (attempt < retries - 1) await sleep(delay)
+      if (attempt < retries - 1) await sleep(Math.pow(2, attempt) * 500)
     }
   }
   if (fallback) return fallback()
   throw lastError
+}
+
+function withTimeout<T>(p: Promise<T>, ms?: number): Promise<T> {
+  if (!ms) return p
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms)
+    p.then(
+      v => { clearTimeout(timer); resolve(v) },
+      e => { clearTimeout(timer); reject(e) }
+    )
+  })
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
 
+export const maxDuration = 30
+
 const PLATFORM_NORMS: Record<string, string> = {
   tiktok:    'fast-paced, hook in 1s, casual Gen-Z tone, 15-60 seconds, trending sounds reference',
   instagram: 'visual-first, lifestyle tone, 30-90 seconds for Reels, polished but authentic',

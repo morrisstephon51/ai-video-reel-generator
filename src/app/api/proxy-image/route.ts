@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-export const maxDuration = 30
+export const maxDuration = 60
 
 const ALLOWED_HOSTS = new Set(['image.pollinations.ai', 'pollinations.ai'])
 
@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
   try {
     const res = await fetch(decodeURIComponent(url), {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VideoRenderer/1.0)' },
-      signal: AbortSignal.timeout(25000),
+      // kontext (avatar) images regenerate on GET and can take far longer than flux
+      signal: AbortSignal.timeout(55000),
     })
     if (!res.ok) throw new Error(`upstream ${res.status}`)
 

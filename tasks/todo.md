@@ -1,3 +1,17 @@
+# Hardening Iteration (post-merge review pass, 8-angle adversarial review applied)
+
+- [x] iOS Safari: play-then-pause before extracting the persona frame (black-canvas bug), preload, seek timeout guard + onerror rejection
+- [x] withResilience: per-attempt `timeoutMs` (one hung upstream fetch can no longer eat the whole function budget) and captureError is fire-and-forget (classifyError's LLM call was serially awaited inside every retry)
+- [x] generate-image: persona (kontext) goes through withResilience (1 bounded 30s attempt, failures land in error_logs) → falls back to standard generation (3×15s bounded); response is always `{ imageUrl, persona }` so downgrades are observable
+- [x] maxDuration on every Groq/Pollinations route: image/script/voice/review = 60s, all 10 agent routes + enhance + trends = 30s, proxy-image = 60s (kontext regenerates on GET — upstream timeout raised to 55s)
+- [x] render.ts: try/finally stops the recorder + closes the AudioContext on mid-render failure (browsers cap live AudioContexts — leaks made later renders silent); resume() no longer awaited (policy-suspended context pends forever)
+- [x] VideoRenderer: previous render's object URL revoked only after the new render succeeds (eager revoke destroyed the last good video on a failed re-render; Re-render path previously never revoked at all)
+- [x] PlatformPackages: abortable effect keyed on topic (StrictMode-safe without a ref, no setState after unmount, rebuilds if topic changes)
+- [x] SETUP.md: full go-live guide (Supabase, env vars, avatar, YouTube OAuth, daily flow)
+- [x] Verify: npm run build clean
+
+---
+
 # Content Automation Build — trends → generate → package → clips → schedule → post
 
 Goal: mold the generator into the full content machine: research trending
