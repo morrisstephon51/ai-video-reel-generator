@@ -187,7 +187,7 @@ create table if not exists content_queue (
   video_url     text,
   scheduled_at  timestamptz not null,
   posted_at     timestamptz,
-  status        text not null default 'queued', -- queued | ready | posted | failed
+  status        text not null default 'queued', -- queued | publishing | ready | posted | failed
   platform_post_id text,
   last_error    text,
   created_at    timestamptz not null default now()
