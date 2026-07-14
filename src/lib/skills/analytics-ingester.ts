@@ -45,17 +45,16 @@ export async function ingestAnalytics(
   try {
     const db = createServiceClient()
     await db.from('post_analytics').insert({
-      post_id:         analytics.postId,
-      platform:        analytics.platform,
-      platform_post_id: analytics.platformPostId,
-      views:           analytics.views,
-      likes:           analytics.likes,
-      shares:          analytics.shares,
-      comments:        analytics.comments,
-      reach:           analytics.reach,
-      impressions:     analytics.impressions,
-      engagement_rate: analytics.engagement_rate,
-      recorded_at:     analytics.recorded_at,
+      scheduled_post_id: analytics.postId,
+      platform:          analytics.platform,
+      platform_post_id:  analytics.platformPostId,
+      views:             analytics.views,
+      likes:             analytics.likes,
+      shares:            analytics.shares,
+      comments:          analytics.comments,
+      reach:             analytics.reach,
+      impressions:       analytics.impressions,
+      engagement_rate:   analytics.engagement_rate,
     })
   } catch (err) {
     console.error('[analytics-ingester] Failed to save analytics:', (err as Error).message)

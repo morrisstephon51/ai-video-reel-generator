@@ -119,15 +119,20 @@ create table if not exists scheduled_posts (
 
 -- Analytics per post
 create table if not exists post_analytics (
-  id               uuid primary key default gen_random_uuid(),
+  id                uuid primary key default gen_random_uuid(),
   scheduled_post_id uuid not null references scheduled_posts(id) on delete cascade,
-  views            integer not null default 0,
-  likes            integer not null default 0,
-  shares           integer not null default 0,
-  saves            integer not null default 0,
-  comments         integer not null default 0,
-  follows          integer not null default 0,
-  fetched_at       timestamptz not null default now()
+  platform          text,
+  platform_post_id  text,
+  views             integer not null default 0,
+  likes             integer not null default 0,
+  shares            integer not null default 0,
+  saves             integer not null default 0,
+  comments          integer not null default 0,
+  follows           integer not null default 0,
+  reach             integer not null default 0,
+  impressions       integer not null default 0,
+  engagement_rate   numeric not null default 0,
+  created_at        timestamptz not null default now()
 );
 
 -- Topic bank for autonomous generation
