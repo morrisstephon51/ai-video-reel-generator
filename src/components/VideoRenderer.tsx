@@ -1,24 +1,79 @@
 'use client'
 import { useState } from 'react'
 import { Download, Loader2, Video, AlertCircle } from 'lucide-react'
-import { renderScenes, RenderScene, RenderResult } from '@/lib/render'
+import type { RenderResult } from '@/lib/render'
+
+interface Scene {
+  imageUrl: string
+  duration: number
+  caption?: string
+}
 
 interface Props {
-  scenes: RenderScene[]
+  scenes: Scene[]
   audioUrl?: string | null
   aspectRatio?: string
   textScale?: number
   onRendered?: (result: RenderResult) => void
 }
 
+function proxyUrl(url: string) {
+  if (url.startsWith('data:')) return url
+  return `/api/proxy-image?url=${encodeURIComponent(url)}`
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error(`Failed to load image: ${src.slice(0, 60)}`))
+    img.src = src
+  })
+}
+
+function drawCaption(ctx: CanvasRenderingContext2D, caption: string, w: number, h: number, textScale = 1) {
+  const grad = ctx.createLinearGradient(0, h * 0.6, 0, h)
+  grad.addColorStop(0, 'rgba(0,0,0,0)')
+  grad.addColorStop(1, 'rgba(0,0,0,0.85)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, h * 0.6, w, h * 0.4)
+
+  const fontSize = Math.round(h * 0.038 * textScale)
+  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
+  ctx.fillStyle = 'white'
+  ctx.textAlign = 'center'
+  ctx.shadowColor = 'rgba(0,0,0,0.9)'
+  ctx.shadowBlur = 6
+
+  const maxWidth = w * 0.88
+  const words = caption.split(' ')
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word
+    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = word }
+    else line = test
+  }
+  if (line) lines.push(line)
+
+  const lineH = fontSize * 1.3
+  const totalH = lines.length * lineH
+  const startY = h - totalH - Math.round(h * 0.045)
+  lines.forEach((l, i) => ctx.fillText(l, w / 2, startY + i * lineH))
+  ctx.shadowBlur = 0
+}
+
 export default function VideoRenderer({ scenes, audioUrl, aspectRatio = '9:16', textScale = 1, onRendered }: Props) {
   const [status, setStatus]     = useState<'idle' | 'rendering' | 'done' | 'error'>('idle')
   const [sceneIdx, setSceneIdx] = useState(0)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
-  const [ext, setExt]           = useState<'mp4' | 'webm'>('mp4')
+  const [outputMime, setOutputMime] = useState<'video/mp4' | 'video/webm'>('video/mp4')
   const [error, setError]       = useState('')
 
   const totalDuration = scenes.reduce((s, sc) => s + (sc.duration ?? 4), 0)
+  const dims = aspectRatio === '16:9' ? { w: 960, h: 540 } :
+               aspectRatio === '1:1'  ? { w: 720, h: 720 } :
+                                        { w: 540, h: 960 }
 
   async function render() {
     setStatus('rendering')
@@ -26,22 +81,84 @@ export default function VideoRenderer({ scenes, audioUrl, aspectRatio = '9:16', 
     setSceneIdx(0)
 
     try {
-      const result = await renderScenes({
-        scenes, audioUrl, aspectRatio, textScale,
-        onScene: setSceneIdx,
-      })
-      // Only discard the previous render once the new one has succeeded
-      if (videoUrl) URL.revokeObjectURL(videoUrl)
-      setExt(result.ext)
-      setVideoUrl(URL.createObjectURL(result.blob))
+      const { w, h } = dims
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')!
+
+      // Canvas stream at 30fps
+      const stream = canvas.captureStream(30)
+
+      // Wire audio into the stream if available
+      let audioEl: HTMLAudioElement | null = null
+      if (audioUrl) {
+        audioEl = new Audio(audioUrl)
+        const audioCtx = new AudioContext()
+        const src = audioCtx.createMediaElementSource(audioEl)
+        const dest = audioCtx.createMediaStreamDestination()
+        src.connect(dest)
+        src.connect(audioCtx.destination)
+        stream.addTrack(dest.stream.getAudioTracks()[0])
+      }
+
+      // Pick best supported container (MP4 on Safari, WebM on Chrome)
+      const mime = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm']
+        .find(m => MediaRecorder.isTypeSupported(m)) ?? 'video/webm'
+      setOutputMime(mime.startsWith('video/mp4') ? 'video/mp4' : 'video/webm')
+
+      const chunks: Blob[] = []
+      const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2_500_000 })
+      recorder.ondataavailable = e => e.data.size > 0 && chunks.push(e.data)
+      recorder.start(200)
+
+      // Start audio
+      if (audioEl) { audioEl.currentTime = 0; audioEl.play().catch(() => {}) }
+
+      // Draw each scene for its duration
+      for (let i = 0; i < scenes.length; i++) {
+        setSceneIdx(i)
+        const scene = scenes[i]
+
+        // Fetch image via proxy (avoids canvas CORS tainting)
+        const img = await loadImage(proxyUrl(scene.imageUrl))
+
+        // Fill canvas with scene image (cover crop)
+        const imgAspect = img.width / img.height
+        const canvasAspect = w / h
+        let sx = 0, sy = 0, sw = img.width, sh = img.height
+        if (imgAspect > canvasAspect) {
+          sw = img.height * canvasAspect
+          sx = (img.width - sw) / 2
+        } else {
+          sh = img.width / canvasAspect
+          sy = (img.height - sh) / 2
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
+        if (scene.caption) drawCaption(ctx, scene.caption, w, h, textScale)
+
+        await new Promise(r => setTimeout(r, (scene.duration ?? 4) * 1000))
+      }
+
+      // Stop recording
+      recorder.stop()
+      audioEl?.pause()
+      await new Promise<void>(r => { recorder.onstop = () => r() })
+
+      const mimeType = (mime.startsWith('video/mp4') ? 'video/mp4' : 'video/webm') as 'video/mp4' | 'video/webm'
+      const ext = outputMime === 'video/mp4' ? 'mp4' : 'webm'
+      const blob = new Blob(chunks, { type: mimeType })
+      setVideoUrl(URL.createObjectURL(blob))
       setStatus('done')
-      onRendered?.(result)
+      onRendered?.({ blob, mimeType, ext })
     } catch (err) {
       console.error('[VideoRenderer]', err)
       setError((err as Error).message)
       setStatus('error')
     }
   }
+
+  const ext = outputMime === 'video/mp4' ? 'mp4' : 'webm'
 
   return (
     <div className="w-full">
@@ -95,7 +212,7 @@ export default function VideoRenderer({ scenes, audioUrl, aspectRatio = '9:16', 
               Download {ext.toUpperCase()}
             </a>
             <button
-              onClick={() => setStatus('idle')}
+              onClick={() => { setStatus('idle'); setVideoUrl(null) }}
               className="px-4 py-3 border border-surface-border text-zinc-400 hover:text-white text-sm rounded-xl transition-colors"
             >
               Re-render

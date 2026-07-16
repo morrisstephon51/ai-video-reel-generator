@@ -1,10 +1,9 @@
 import Groq from 'groq-sdk'
 
-// Lazy so builds never require the API key at import time
-let client: Groq | null = null
-function groq(): Groq {
-  if (!client) client = new Groq({ apiKey: process.env.GROQ_API_KEY ?? '' })
-  return client
+let _groq: Groq | null = null
+function getGroq() {
+  if (!_groq) _groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
+  return _groq
 }
 
 export async function chat(
@@ -12,7 +11,7 @@ export async function chat(
   userMessage: string,
   jsonMode = false
 ): Promise<string> {
-  const response = await groq().chat.completions.create({
+  const response = await getGroq().chat.completions.create({
     model: 'llama-3.3-70b-versatile',
     messages: [
       { role: 'system', content: systemPrompt },

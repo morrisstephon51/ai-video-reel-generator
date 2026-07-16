@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import clsx from 'clsx'
 import { Play, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react'
 
@@ -29,7 +30,7 @@ const statusLabel: Record<string, string> = {
 
 export default function VideoCard({ id, topic, status, createdAt, thumbnailUrl, compositeScore }: Props) {
   return (
-    <div className="bg-surface-card border border-surface-border rounded-xl overflow-hidden hover:border-brand-500/40 transition-colors group cursor-pointer">
+    <Link href={`/library/${id}`} className="bg-surface-card border border-surface-border rounded-xl overflow-hidden hover:border-brand-500/40 transition-colors group cursor-pointer block">
       {/* Thumbnail */}
       <div className="relative aspect-[9/16] bg-zinc-900 overflow-hidden" style={{ maxHeight: 180 }}>
         {thumbnailUrl ? (
@@ -64,6 +65,6 @@ export default function VideoCard({ id, topic, status, createdAt, thumbnailUrl, 
           </span>
         </div>
       </div>
-    </div>
+    </Link>
   )
 }

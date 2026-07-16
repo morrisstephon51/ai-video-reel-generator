@@ -69,10 +69,10 @@ export default async function DashboardPage() {
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Recent</h2>
               <div className="space-y-2">
                 {recentVideos.map(v => (
-                  <div key={v.id} className="bg-surface-card border border-surface-border rounded-lg px-4 py-3 flex items-center justify-between">
+                  <Link key={v.id} href={`/library/${v.id}`} className="bg-surface-card border border-surface-border rounded-lg px-4 py-3 flex items-center justify-between hover:border-brand-500/40 transition-colors">
                     <span className="text-sm text-white">{v.topic}</span>
                     <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">{v.status}</span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
