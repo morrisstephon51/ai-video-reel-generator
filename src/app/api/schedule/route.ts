@@ -6,6 +6,8 @@ const DAY_INDEX: Record<string, number> = {
   Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6,
 }
 
+const VALID_PLATFORMS = new Set(['youtube', 'tiktok', 'instagram', 'twitter', 'linkedin', 'facebook'])
+
 function nextSlot(platform: string, notBefore: Date): Date {
   const slots = getBestPostTimes(platform)
   let best: Date | null = null
@@ -43,20 +45,24 @@ export async function POST(req: NextRequest) {
     if (!packages?.length) return NextResponse.json({ error: 'packages required' }, { status: 400 })
 
     const now = new Date()
-    const rows = packages.map((pkg: {
-      platform: string; title: string; description?: string; caption?: string; hashtags?: string[]
-    }) => ({
-      video_id: videoId ?? null,
-      platform: pkg.platform,
-      title: pkg.title,
-      description: pkg.description ?? null,
-      caption: pkg.caption ?? null,
-      hashtags: pkg.hashtags ?? [],
-      thumbnail_url: thumbnailUrl ?? null,
-      video_url: videoUrl ?? null,
-      scheduled_at: scheduledAt ?? nextSlot(pkg.platform, now).toISOString(),
-      status: 'queued',
-    }))
+    const rows = packages
+      .filter((pkg: { platform: string }) => VALID_PLATFORMS.has(pkg.platform?.toLowerCase()))
+      .map((pkg: {
+        platform: string; title: string; description?: string; caption?: string; hashtags?: string[]
+      }) => ({
+        video_id: videoId ?? null,
+        platform: pkg.platform.toLowerCase(),
+        title: pkg.title,
+        description: pkg.description ?? null,
+        caption: pkg.caption ?? null,
+        hashtags: pkg.hashtags ?? [],
+        thumbnail_url: thumbnailUrl ?? null,
+        video_url: videoUrl ?? null,
+        scheduled_at: scheduledAt ?? nextSlot(pkg.platform.toLowerCase(), now).toISOString(),
+        status: 'queued',
+      }))
+
+    if (!rows.length) return NextResponse.json({ error: 'no valid platforms' }, { status: 400 })
 
     const db = createServiceClient()
     const { data, error } = await db.from('content_queue').insert(rows).select('id, platform, scheduled_at')
