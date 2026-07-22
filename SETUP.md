@@ -23,6 +23,7 @@ Vercel Dashboard → the `ai-video-reel-generator` project → **Settings → En
 | `SUPABASE_SERVICE_ROLE_KEY` | your service_role key from step 1 |
 | `GROQ_API_KEY` | free key from https://console.groq.com/keys |
 | `CRON_SECRET` | any long random string — locks the publish endpoint |
+| `ADMIN_SECRET` | any long random string — guards `DELETE /api/persona` and `POST /api/upload-video` |
 
 Then **Deployments → ⋯ on the latest → Redeploy** so the new variables take effect.
 
