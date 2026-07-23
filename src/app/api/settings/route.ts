@@ -18,20 +18,34 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const profile = await req.json()
-    const db = createServiceClient()
+    const body = await req.json()
+    const str = (v: unknown, max: number) =>
+      typeof v === 'string' ? v.slice(0, max) : ''
 
+    const row = {
+      tone:              str(body.tone, 300),
+      pacing:            str(body.pacing, 300),
+      caption_format:    str(body.caption_format, 300),
+      hashtag_strategy:  str(body.hashtag_strategy, 300),
+      visual_style:      str(body.visual_style, 300),
+      hook_style:        str(body.hook_style, 300),
+      updated_at:        new Date().toISOString(),
+    }
+
+    const db = createServiceClient()
     const { data: existing } = await db
       .from('style_profiles')
       .select('id')
       .order('updated_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (existing?.id) {
-      await db.from('style_profiles').update({ ...profile, updated_at: new Date().toISOString() }).eq('id', existing.id)
+      const { error } = await db.from('style_profiles').update(row).eq('id', existing.id)
+      if (error) throw new Error(error.message)
     } else {
-      await db.from('style_profiles').insert({ ...profile })
+      const { error } = await db.from('style_profiles').insert(row)
+      if (error) throw new Error(error.message)
     }
 
     return NextResponse.json({ ok: true })
