@@ -191,12 +191,33 @@ create table if not exists content_queue (
   thumbnail_url text,
   video_url     text,
   scheduled_at  timestamptz not null,
+  claimed_at    timestamptz,             -- set atomically when a cron invocation claims the row
   posted_at     timestamptz,
-  status        text not null default 'queued', -- queued | publishing | ready | posted | failed
+  status        text not null default 'queued', -- queued | processing | ready | posted | failed
   platform_post_id text,
   last_error    text,
   created_at    timestamptz not null default now()
 );
+
+-- Atomically claim up to `limit_count` queued items using FOR UPDATE SKIP LOCKED.
+-- Prevents duplicate processing when concurrent Vercel Cron invocations overlap.
+create or replace function claim_queue_items(limit_count int default 5)
+returns setof content_queue
+language sql
+as $$
+  update content_queue
+  set status = 'processing', claimed_at = now()
+  where id in (
+    select id
+    from content_queue
+    where status = 'queued'
+      and scheduled_at <= now()
+    order by scheduled_at
+    limit limit_count
+    for update skip locked
+  )
+  returning *;
+$$;
 
 -- Seed default style profile
 insert into style_profiles (niche, tone, hook_patterns)

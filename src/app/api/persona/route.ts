@@ -59,7 +59,11 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
+  const secret = process.env.ADMIN_SECRET
+  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
   try {
     const db = createServiceClient()
     await db.from('personas').delete().neq('id', '00000000-0000-0000-0000-000000000000')
