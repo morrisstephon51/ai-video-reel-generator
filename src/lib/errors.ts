@@ -13,6 +13,12 @@ export interface CapturedError {
 }
 
 export async function captureError(err: CapturedError) {
+  // Bail early when Supabase is not configured — calling classifyError (Groq) before
+  // knowing we can persist the result wastes rate-limit quota on every caught exception.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[captureError] skipped (Supabase not configured):', err.service, err.message)
+    return
+  }
   try {
     const db = createServiceClient()
     const classified = await classifyError(err)
