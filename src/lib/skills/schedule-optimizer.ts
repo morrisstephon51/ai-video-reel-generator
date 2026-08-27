@@ -51,6 +51,10 @@ export function getBestPostTimes(
   _timezone?: string
 ): PostSchedule[] {
   const normalized = platform.toLowerCase()
-  return (PLATFORM_SCHEDULES[normalized] ?? PLATFORM_SCHEDULES['instagram'])
+  // Copy before sorting: Array.prototype.sort mutates in place, so sorting the
+  // PLATFORM_SCHEDULES constant directly would (a) return the same shared array on
+  // every call and (b) let any caller-side mutation corrupt the source of truth for
+  // all future calls. Return a fresh array each time (matches self-improver.ts).
+  return [...(PLATFORM_SCHEDULES[normalized] ?? PLATFORM_SCHEDULES['instagram'])]
     .sort((a, b) => b.engagement_index - a.engagement_index)
 }
