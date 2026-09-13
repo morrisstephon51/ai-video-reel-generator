@@ -59,11 +59,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function DELETE(req: NextRequest) {
-  const secret = process.env.ADMIN_SECRET
-  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+// Browser-only route (only caller is PersonaUpload.tsx "Remove persona"). A
+// server-only ADMIN_SECRET could never be satisfied from the browser, so the
+// guard 401'd every delete and the row silently persisted on reload (issue
+// #26). Consistent with POST above and the other browser-called mutation
+// routes: rely on Vercel Deployment Protection.
+export async function DELETE() {
   try {
     const db = createServiceClient()
     await db.from('personas').delete().neq('id', '00000000-0000-0000-0000-000000000000')

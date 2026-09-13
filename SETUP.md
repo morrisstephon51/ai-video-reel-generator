@@ -23,7 +23,8 @@ Vercel Dashboard → the `ai-video-reel-generator` project → **Settings → En
 | `SUPABASE_SERVICE_ROLE_KEY` | your service_role key from step 1 |
 | `GROQ_API_KEY` | free key from https://console.groq.com/keys |
 | `CRON_SECRET` | any long random string — locks the publish endpoint |
-| `ADMIN_SECRET` | any long random string — guards `DELETE /api/persona` and `POST /api/upload-video` |
+
+Browser-initiated mutation routes (including `POST /api/upload-video` and `DELETE /api/persona`) are protected by Vercel Deployment Protection, not a shared secret — a server-only secret can't be presented by the browser, and this app has no user login. Keep the project behind Deployment Protection instead of trying to guard those routes with an env var.
 
 Then **Deployments → ⋯ on the latest → Redeploy** so the new variables take effect.
 
