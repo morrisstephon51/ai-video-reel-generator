@@ -3,12 +3,14 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 const EXPORTS_PREFIX = 'exports/'
 
+// Browser-only route: the finished video is a client-side Blob, so the upload
+// must originate in the browser. There is no server-to-server caller and no
+// user session, so a server-only ADMIN_SECRET could never be satisfied here —
+// it 401'd in every configuration and made "Schedule for Publishing"
+// unreachable (issue #26). Protection is the exports/ path-injection guard
+// below plus Vercel Deployment Protection, matching the other browser-called
+// mutation routes.
 export async function POST(req: NextRequest) {
-  const secret = process.env.ADMIN_SECRET
-  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
-
   try {
     const { action, videoId, ext, path } = await req.json()
     const db = createServiceClient()
