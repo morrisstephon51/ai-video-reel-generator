@@ -59,11 +59,13 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function DELETE(req: NextRequest) {
-  const secret = process.env.ADMIN_SECRET
-  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+// Browser-only route: PersonaUpload.tsx calls DELETE /api/persona with no
+// Authorization header — the browser has no access to ADMIN_SECRET (server-only
+// env var), so the ADMIN_SECRET guard added by PR #14 (fixes #13) 401'd in
+// every configuration and made the "Remove avatar" button silently broken
+// (issue #28). Protection is Vercel Deployment Protection, matching POST here
+// and the corrected POST /api/upload-video (PR #27 / issue #26).
+export async function DELETE() {
   try {
     const db = createServiceClient()
     await db.from('personas').delete().neq('id', '00000000-0000-0000-0000-000000000000')
