@@ -1,4 +1,5 @@
 'use client'
+import { runRenderSequence } from './render-sequence'
 
 export interface RenderScene {
   imageUrl: string
@@ -13,6 +14,7 @@ export interface RenderOptions {
   aspectRatio?: string
   textScale?: number
   onScene?: (index: number) => void
+  onPreload?: (loaded: number, total: number) => void
 }
 
 export interface RenderResult {
@@ -88,7 +90,7 @@ function drawSceneImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, w:
 }
 
 export async function renderScenes({
-  scenes, audioUrl, audioOffset = 0, aspectRatio = '9:16', textScale = 1, onScene,
+  scenes, audioUrl, audioOffset = 0, aspectRatio = '9:16', textScale = 1, onScene, onPreload,
 }: RenderOptions): Promise<RenderResult> {
   const { w, h } = dimsFor(aspectRatio)
   const canvas = document.createElement('canvas')
@@ -119,25 +121,36 @@ export async function renderScenes({
   const chunks: Blob[] = []
   const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2_500_000 })
   recorder.ondataavailable = e => e.data.size > 0 && chunks.push(e.data)
-  recorder.start(200)
 
   try {
-    if (audioEl) {
-      audioEl.currentTime = audioOffset
-      audioEl.play().catch(() => {})
-    }
-
-    for (let i = 0; i < scenes.length; i++) {
-      onScene?.(i)
-      const scene = scenes[i]
-      const img = await loadImage(proxyUrl(scene.imageUrl))
-      drawSceneImage(ctx, img, w, h)
-      if (scene.caption) drawCaption(ctx, scene.caption, w, h, textScale)
-      await new Promise(r => setTimeout(r, (scene.duration ?? 4) * 1000))
-    }
-
-    recorder.stop()
-    await new Promise<void>(r => { recorder.onstop = () => r() })
+    // Every image is fetched before `startRecording` runs — see render-sequence.ts
+    // for why fetching inside the recording window corrupts the timeline.
+    await runRenderSequence<HTMLImageElement>(
+      scenes.map(scene => (scene.duration ?? 4) * 1000),
+      {
+        loadFrame: i => loadImage(proxyUrl(scenes[i].imageUrl)),
+        drawFrame: (i, img) => {
+          drawSceneImage(ctx, img, w, h)
+          const { caption } = scenes[i]
+          if (caption) drawCaption(ctx, caption, w, h, textScale)
+        },
+        startRecording: () => {
+          recorder.start(200)
+          if (audioEl) {
+            audioEl.currentTime = audioOffset
+            audioEl.play().catch(() => {})
+          }
+        },
+        hold: ms => new Promise(r => setTimeout(r, ms)),
+        // onstop is attached before stop() so a synchronous stop cannot strand this promise
+        stopRecording: () => new Promise<void>(resolve => {
+          recorder.onstop = () => resolve()
+          recorder.stop()
+        }),
+        onScene,
+        onPreload,
+      },
+    )
   } finally {
     // A mid-render failure must not leak a live recorder or AudioContext
     // (browsers cap concurrent AudioContexts — leaks make later renders silent)
