@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node 22, not 20: the test script uses a glob (`node --test "test/**/*.test.mjs"`),
+      # and glob expansion in the built-in test runner landed in Node 21.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      # --if-present so this is a no-op until the test script lands, then picks it up
+      # automatically without needing a follow-up change to this workflow.
+      - name: Test
+        run: npm test --if-present
+
+      - name: Build
+        run: npm run build
