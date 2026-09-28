@@ -1,55 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { publishToPlatform, QueueItem } from '@/lib/connectors'
+import { publishToPlatform } from '@/lib/connectors'
+import { createSupabaseQueuePort, runQueue, type QueueClient } from '@/lib/queue-runner'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
+// Claiming, reaping and the run budget all live in @/lib/queue-runner so they are
+// testable without a database. This route only wires them to supabase.
 async function processQueue() {
-  const db = createServiceClient()
+  const port = createSupabaseQueuePort(createServiceClient() as unknown as QueueClient)
+  return runQueue(port, publishToPlatform)
+}
 
-  // Atomically claim items before processing — prevents double-publish when
-  // concurrent Vercel Cron invocations overlap (see issue #11).
-  const { data: claimed, error } = await db.rpc('claim_queue_items', { limit_count: 5 })
-  if (error) throw new Error(error.message)
+function authorized(req: NextRequest) {
+  const secret = process.env.CRON_SECRET
+  return !secret || req.headers.get('authorization') === `Bearer ${secret}`
+}
 
-  const results = []
-  for (const item of (claimed ?? []) as (QueueItem & { scheduled_at: string })[]) {
-    const result = await publishToPlatform(item)
-    const update =
-      result.outcome === 'posted' ? { status: 'posted', posted_at: new Date().toISOString(), platform_post_id: result.postId, last_error: null } :
-      result.outcome === 'ready'  ? { status: 'ready',  last_error: result.reason } :
-                                    { status: 'failed',  last_error: result.error }
-    await db.from('content_queue').update(update).eq('id', item.id)
-    results.push({ id: item.id, platform: item.platform, ...result })
+async function handle(req: NextRequest) {
+  if (!authorized(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
-  return results
+  try {
+    const report = await processQueue()
+    return NextResponse.json({
+      processed: report.results.length,
+      results: report.results,
+      reaped: report.reaped,
+      stoppedEarly: report.stoppedEarly,
+    })
+  } catch (err) {
+    console.error('[cron/publish]', err)
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+  }
 }
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
-  try {
-    const results = await processQueue()
-    return NextResponse.json({ processed: results.length, results })
-  } catch (err) {
-    console.error('[cron/publish]', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
-  }
+  return handle(req)
 }
 
 export async function POST(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
-  try {
-    const results = await processQueue()
-    return NextResponse.json({ processed: results.length, results })
-  } catch (err) {
-    console.error('[cron/publish]', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
-  }
+  return handle(req)
 }
