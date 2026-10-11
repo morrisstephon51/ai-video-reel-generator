@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       analytics = (data ?? []) as AnalyticsRow[]
     }
 
-    // Load current style profile if not provided
+    // Load current style profile if not provided — always fetch so we have the id for upsert
     let currentProfile: StyleProfile = style_profile ?? {}
     if (!Object.keys(currentProfile).length) {
       const { data: profileData } = await db
@@ -65,9 +65,7 @@ export async function POST(req: NextRequest) {
           "niche": string,
           "tone": string,
           "hook_style": string,
-          "pacing": string,
-          "top_performing_patterns": [string],
-          "avoid_patterns": [string]
+          "pacing": string
         },
         "reasoning": string
       }`,
@@ -81,9 +79,11 @@ export async function POST(req: NextRequest) {
       reasoning: string
     }
 
-    // Update style_profiles table
+    // Update style_profiles table — spread currentProfile first so the existing id
+    // is included; without it upsert inserts a new row instead of updating in place.
     if (parsed.updated_profile && Object.keys(parsed.updated_profile).length) {
       await db.from('style_profiles').upsert({
+        ...currentProfile,
         ...parsed.updated_profile,
         updated_at: new Date().toISOString(),
       })
