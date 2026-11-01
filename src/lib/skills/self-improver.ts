@@ -20,6 +20,36 @@ interface PostAnalytics {
   created_at: string
 }
 
+/**
+ * Map the model's profile update onto the real `style_profiles` columns before
+ * it reaches Supabase. The table stores hooks in a `hook_patterns` jsonb array
+ * (src/lib/db/schema.sql); it has no `hook_style` column. Upserting a
+ * `hook_style` key fails the whole write (PGRST204 - column not in schema
+ * cache), so strip it and fold any hook value into `hook_patterns`. Mirrors
+ * toUpsertProfile() added to the self-improver API route for issue #43 / PR #44;
+ * once that lands these two should converge on one shared helper.
+ */
+export function toUpsertProfile(
+  updated: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(updated)) {
+    if (k === 'hook_style' || k === 'hook_patterns') continue
+    out[k] = v
+  }
+  const rawHooks = updated.hook_patterns ?? updated.hook_style
+  if (rawHooks !== undefined) {
+    out.hook_patterns = Array.isArray(rawHooks)
+      ? rawHooks.map((h) => String(h).slice(0, 300)).slice(0, 12)
+      : String(rawHooks)
+          .split('\n')
+          .map((h) => h.trim().slice(0, 300))
+          .filter(Boolean)
+          .slice(0, 12)
+  }
+  return out
+}
+
 export async function runSelfImprovementCycle(): Promise<ImprovementReport> {
   const db = createServiceClient()
 
@@ -68,7 +98,7 @@ export async function runSelfImprovementCycle(): Promise<ImprovementReport> {
       "improvements": [string],
       "top_patterns": [string],
       "avoid_patterns": [string],
-      "updated_profile": { "tone": string, "hook_style": string, "pacing": string, "niche": string },
+      "updated_profile": { "tone": string, "hook_patterns": [string], "pacing": string, "niche": string },
       "reasoning": string
     }`,
     `Top performers (${top.length} posts): ${JSON.stringify(top)}
@@ -84,11 +114,13 @@ export async function runSelfImprovementCycle(): Promise<ImprovementReport> {
     reasoning: string
   }
 
-  // Update style_profiles table with recommendations
+  // Update style_profiles table with recommendations. Route the model's profile
+  // through toUpsertProfile so a phantom `hook_style` key never reaches the
+  // upsert (it would fail the whole write with PGRST204 - same bug as issue #43).
   if (parsed.updated_profile && Object.keys(parsed.updated_profile).length) {
     await db.from('style_profiles').upsert({
       ...currentProfile,
-      ...parsed.updated_profile,
+      ...toUpsertProfile(parsed.updated_profile),
       updated_at: new Date().toISOString(),
     })
   }
