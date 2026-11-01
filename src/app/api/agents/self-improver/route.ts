@@ -17,9 +17,38 @@ interface AnalyticsRow {
 interface StyleProfile {
   niche?: string
   tone?: string
-  hook_style?: string
+  hook_patterns?: string[] | string
   pacing?: string
   [key: string]: unknown
+}
+
+/**
+ * Map the model's profile update onto the real `style_profiles` columns before
+ * it reaches Supabase. The table stores hooks in a `hook_patterns` jsonb array
+ * (src/lib/db/schema.sql), but this analysis prompt has historically asked the
+ * model for a `hook_style` string. Upserting a `hook_style` key fails the whole
+ * write (PGRST204 - column not in schema cache, same class as issue #41), so
+ * the self-improvement loop silently never persisted its learned profile - and
+ * PR #39's id fix can't take effect while the write still errors. Translate the
+ * hook field to `hook_patterns` and never let a phantom `hook_style` key through.
+ */
+export function toUpsertProfile(updated: StyleProfile): StyleProfile {
+  const out: StyleProfile = {}
+  for (const [k, v] of Object.entries(updated)) {
+    if (k === 'hook_style' || k === 'hook_patterns') continue
+    out[k] = v
+  }
+  const rawHooks = updated.hook_patterns ?? updated.hook_style
+  if (rawHooks !== undefined) {
+    out.hook_patterns = Array.isArray(rawHooks)
+      ? rawHooks.map((h) => String(h).slice(0, 300)).slice(0, 12)
+      : String(rawHooks)
+          .split('\n')
+          .map((h) => h.trim().slice(0, 300))
+          .filter(Boolean)
+          .slice(0, 12)
+  }
+  return out
 }
 
 export async function POST(req: NextRequest) {
@@ -64,7 +93,7 @@ export async function POST(req: NextRequest) {
         "updated_profile": {
           "niche": string,
           "tone": string,
-          "hook_style": string,
+          "hook_patterns": [string],
           "pacing": string
         },
         "reasoning": string
@@ -84,7 +113,7 @@ export async function POST(req: NextRequest) {
     if (parsed.updated_profile && Object.keys(parsed.updated_profile).length) {
       await db.from('style_profiles').upsert({
         ...currentProfile,
-        ...parsed.updated_profile,
+        ...toUpsertProfile(parsed.updated_profile),
         updated_at: new Date().toISOString(),
       })
     }
