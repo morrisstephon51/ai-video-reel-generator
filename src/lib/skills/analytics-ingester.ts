@@ -45,7 +45,7 @@ export async function ingestAnalytics(
   try {
     const db = createServiceClient()
     await db.from('post_analytics').insert({
-      scheduled_post_id: analytics.postId,
+      queue_item_id:    analytics.postId,
       platform:          analytics.platform,
       platform_post_id:  analytics.platformPostId,
       views:             analytics.views,

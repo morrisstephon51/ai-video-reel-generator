@@ -117,10 +117,31 @@ create table if not exists scheduled_posts (
   platform_post_id text
 );
 
+-- Per-platform publish queue (self-contained: no OAuth rows required to schedule).
+-- Defined before post_analytics because post_analytics.queue_item_id references it.
+create table if not exists content_queue (
+  id            uuid primary key default gen_random_uuid(),
+  video_id      uuid references videos(id) on delete set null,
+  platform      text not null,
+  title         text not null,
+  description   text,
+  caption       text,
+  hashtags      jsonb not null default '[]',
+  thumbnail_url text,
+  video_url     text,
+  scheduled_at  timestamptz not null,
+  claimed_at    timestamptz,             -- set atomically when a cron invocation claims the row
+  posted_at     timestamptz,
+  status        text not null default 'queued', -- queued | processing | ready | posted | failed
+  platform_post_id text,
+  last_error    text,
+  created_at    timestamptz not null default now()
+);
+
 -- Analytics per post
 create table if not exists post_analytics (
-  id                uuid primary key default gen_random_uuid(),
-  scheduled_post_id uuid not null references scheduled_posts(id) on delete cascade,
+  id             uuid primary key default gen_random_uuid(),
+  queue_item_id  uuid not null references content_queue(id) on delete cascade,
   platform          text,
   platform_post_id  text,
   views             integer not null default 0,
@@ -177,26 +198,6 @@ create table if not exists personas (
   image_url   text not null,
   description text,
   created_at  timestamptz not null default now()
-);
-
--- Per-platform publish queue (self-contained: no OAuth rows required to schedule)
-create table if not exists content_queue (
-  id            uuid primary key default gen_random_uuid(),
-  video_id      uuid references videos(id) on delete set null,
-  platform      text not null,
-  title         text not null,
-  description   text,
-  caption       text,
-  hashtags      jsonb not null default '[]',
-  thumbnail_url text,
-  video_url     text,
-  scheduled_at  timestamptz not null,
-  claimed_at    timestamptz,             -- set atomically when a cron invocation claims the row
-  posted_at     timestamptz,
-  status        text not null default 'queued', -- queued | processing | ready | posted | failed
-  platform_post_id text,
-  last_error    text,
-  created_at    timestamptz not null default now()
 );
 
 -- Atomically claim up to `limit_count` queued items using FOR UPDATE SKIP LOCKED.
