@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
+import { coerceScore, coerceStringList, coerceText } from '@/lib/llm-coerce'
 
 export const maxDuration = 30
 
@@ -28,10 +29,10 @@ export async function POST(req: NextRequest) {
       seo_score: number
     }
     return {
-      title: parsed.title ?? '',
-      description: parsed.description ?? '',
-      tags: parsed.tags ?? [],
-      seo_score: Math.min(100, Math.max(0, parsed.seo_score ?? 70)),
+      title: coerceText(parsed?.title, ''),
+      description: coerceText(parsed?.description, ''),
+      tags: coerceStringList(parsed?.tags),
+      seo_score: coerceScore(parsed?.seo_score, 70),
     }
   })
 

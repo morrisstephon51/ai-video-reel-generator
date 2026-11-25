@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
+import { coerceCount, coerceScore } from '@/lib/llm-coerce'
 
 export const maxDuration = 30
 
@@ -37,11 +38,11 @@ export async function POST(req: NextRequest) {
       confidence: number
     }
     return {
-      predicted_views:    Math.max(0, parsed.predicted_views ?? 0),
-      predicted_likes:    Math.max(0, parsed.predicted_likes ?? 0),
-      predicted_shares:   Math.max(0, parsed.predicted_shares ?? 0),
-      viral_probability:  Math.min(100, Math.max(0, parsed.viral_probability ?? 0)),
-      confidence:         Math.min(100, Math.max(0, parsed.confidence ?? 50)),
+      predicted_views:    coerceCount(parsed?.predicted_views, 0),
+      predicted_likes:    coerceCount(parsed?.predicted_likes, 0),
+      predicted_shares:   coerceCount(parsed?.predicted_shares, 0),
+      viral_probability:  coerceScore(parsed?.viral_probability, 0),
+      confidence:         coerceScore(parsed?.confidence, 50),
     }
   })
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
+import { coerceScore, coerceText } from '@/lib/llm-coerce'
 
 export const maxDuration = 30
 
@@ -26,16 +27,21 @@ export async function POST(req: NextRequest) {
       true
     )
     const parsed = JSON.parse(raw) as { thumbnails: Array<{ prompt: string; ctr_score: number }> }
-    const concepts = parsed.thumbnails ?? []
+    const concepts: unknown[] = Array.isArray(parsed?.thumbnails) ? parsed.thumbnails : []
 
-    const thumbnails: Thumbnail[] = concepts.slice(0, 3).map((t) => {
-      const encoded = encodeURIComponent(t.prompt.slice(0, 500))
-      return {
-        prompt: t.prompt,
-        imageUrl: `https://image.pollinations.ai/prompt/${encoded}?width=1280&height=720&nologo=true`,
-        ctr_score: Math.min(100, Math.max(0, t.ctr_score ?? 70)),
-      }
-    })
+    const thumbnails: Thumbnail[] = concepts
+      .map((t) => (t && typeof t === 'object' ? (t as { prompt?: unknown; ctr_score?: unknown }) : {}))
+      .map((t) => ({ prompt: coerceText(t.prompt, '').trim(), ctr_score: t.ctr_score }))
+      .filter((t) => t.prompt.length > 0)
+      .slice(0, 3)
+      .map((t) => {
+        const encoded = encodeURIComponent(t.prompt.slice(0, 500))
+        return {
+          prompt: t.prompt,
+          imageUrl: `https://image.pollinations.ai/prompt/${encoded}?width=1280&height=720&nologo=true`,
+          ctr_score: coerceScore(t.ctr_score, 70),
+        }
+      })
 
     return { thumbnails }
   })

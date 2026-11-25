@@ -32,3 +32,12 @@ export function coerceStringList(value: unknown): string[] {
 export function coerceText(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
 }
+
+/** Finite non-negative whole count (views, likes, shares). Numeric strings are accepted. */
+export function coerceCount(value: unknown, fallback: number): number {
+  let n: number = NaN
+  if (typeof value === 'number') n = value
+  else if (typeof value === 'string' && value.trim() !== '') n = Number(value.trim())
+  if (!Number.isFinite(n)) n = fallback
+  return Math.max(0, Math.round(n))
+}
