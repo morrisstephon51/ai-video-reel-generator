@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
+import { coerceScore, coerceStringList, coerceText } from '@/lib/llm-coerce'
 import { createServiceClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
@@ -31,9 +32,9 @@ async function runAgent(
     const raw = await chat(systemPrompt, contentSummary, true)
     const parsed = JSON.parse(raw)
     return {
-      score:    Math.min(100, Math.max(0, parsed.score ?? 50)),
-      critique: parsed.critique ?? '',
-      fixes:    parsed.fixes ?? [],
+      score:    coerceScore(parsed?.score, 50),
+      critique: coerceText(parsed?.critique, ''),
+      fixes:    coerceStringList(parsed?.fixes),
     }
   }, async () => ({ score: 70, critique: 'Agent unavailable — default score applied', fixes: [] }))
 }
