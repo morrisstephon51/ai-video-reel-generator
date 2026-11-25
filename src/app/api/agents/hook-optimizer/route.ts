@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chat } from '@/lib/groq'
 import { withResilience } from '@/lib/errors'
+import { coerceScore } from '@/lib/llm-coerce'
 
 export const maxDuration = 30
 
@@ -36,10 +37,10 @@ export async function POST(req: NextRequest) {
           `Hook: "${h.text}"`,
           true
         )
-        const { score } = JSON.parse(scoreRaw) as { score: number }
+        const { score } = JSON.parse(scoreRaw) as { score: unknown }
         return {
           text: h.text,
-          score: Math.min(100, Math.max(0, score ?? 50)),
+          score: coerceScore(score, 50),
           type: h.type as Hook['type'],
         }
       })
